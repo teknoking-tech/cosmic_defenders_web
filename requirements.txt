@@ -1,0 +1,9 @@
+Flask
+PyJWT
+oracledb
+bcrypt
+python-dotenv
+uvicorn[gunicorn]
+flask_cors
+
+

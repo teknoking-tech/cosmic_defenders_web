@@ -1,0 +1,24 @@
+version: '3.8'
+
+services:
+  game-api:
+    container_name: game-api-container
+    build:
+      context: .  # Dockerfile'ınızın bulunduğu dizin
+      dockerfile: Dockerfile  # Dockerfile'ı belirtiyoruz
+    environment:
+      - ORACLE_USER=C##COSMIC_DEFENDERS
+      - ORACLE_PASSWORD=MyPassword123
+      - ORACLE_HOST=oracle-db  # Burada oracle-db'nin mevcut konteyneri kullanılacak
+      - ORACLE_PORT=1521
+      - ORACLE_SID=XE
+      - SECRET_KEY=48cf0472d3f2d96f4aa35850d325e0ee091b68a5c9cb970e3b696020d9da431b
+    ports:
+      - "8000:8000"  # FastAPI için port yönlendirme
+    networks:
+      - game-network
+
+
+networks:
+  game-network:
+    external: true

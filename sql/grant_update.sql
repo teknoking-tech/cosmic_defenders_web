@@ -1,0 +1,72 @@
+
+-- Kullanıcıya tüm tablolarda insert yetkisi ver
+GRANT INSERT ON users TO C##COSMIC_DEFENDERS;
+GRANT INSERT ON player_profiles TO C##COSMIC_DEFENDERS;
+GRANT INSERT ON spaceships TO C##COSMIC_DEFENDERS;
+GRANT INSERT ON player_ships TO C##COSMIC_DEFENDERS;
+GRANT INSERT ON game_scores TO C##COSMIC_DEFENDERS;
+GRANT INSERT ON achievements TO C##COSMIC_DEFENDERS;
+GRANT INSERT ON player_achievements TO C##COSMIC_DEFENDERS;
+GRANT INSERT ON auth_tokens TO C##COSMIC_DEFENDERS;
+
+-- Kullanıcıya tüm tablolarda select yetkisi ver
+GRANT SELECT ON users TO C##COSMIC_DEFENDERS;
+GRANT SELECT ON player_profiles TO C##COSMIC_DEFENDERS;
+GRANT SELECT ON spaceships TO C##COSMIC_DEFENDERS;
+GRANT SELECT ON player_ships TO C##COSMIC_DEFENDERS;
+GRANT SELECT ON game_scores TO C##COSMIC_DEFENDERS;
+GRANT SELECT ON achievements TO C##COSMIC_DEFENDERS;
+GRANT SELECT ON player_achievements TO C##COSMIC_DEFENDERS;
+GRANT SELECT ON auth_tokens TO C##COSMIC_DEFENDERS;
+
+-- Kullanıcıya tüm tablolarda update yetkisi ver
+GRANT UPDATE ON users TO C##COSMIC_DEFENDERS;
+GRANT UPDATE ON player_profiles TO C##COSMIC_DEFENDERS;
+GRANT UPDATE ON spaceships TO C##COSMIC_DEFENDERS;
+GRANT UPDATE ON player_ships TO C##COSMIC_DEFENDERS;
+GRANT UPDATE ON game_scores TO C##COSMIC_DEFENDERS;
+GRANT UPDATE ON achievements TO C##COSMIC_DEFENDERS;
+GRANT UPDATE ON player_achievements TO C##COSMIC_DEFENDERS;
+GRANT UPDATE ON auth_tokens TO C##COSMIC_DEFENDERS;
+
+-- Kullanıcıya tüm tablolarda delete yetkisi ver
+GRANT DELETE ON users TO C##COSMIC_DEFENDERS;
+GRANT DELETE ON player_profiles TO C##COSMIC_DEFENDERS;
+GRANT DELETE ON spaceships TO C##COSMIC_DEFENDERS;
+GRANT DELETE ON player_ships TO C##COSMIC_DEFENDERS;
+GRANT DELETE ON game_scores TO C##COSMIC_DEFENDERS;
+GRANT DELETE ON achievements TO C##COSMIC_DEFENDERS;
+GRANT DELETE ON player_achievements TO C##COSMIC_DEFENDERS;
+GRANT DELETE ON auth_tokens TO C##COSMIC_DEFENDERS;
+
+SELECT USER FROM DUAL;
+
+
+
+
+
+
+
+-- Kullanıcının sahip olduğu rolleri kontrol et
+SELECT * FROM DBA_ROLE_PRIVS WHERE grantee = 'C##COSMIC_DEFENDERS';
+
+-- Kullanıcının sahip olduğu sistem izinlerini kontrol et
+SELECT * FROM DBA_SYS_PRIVS WHERE grantee = 'C##COSMIC_DEFENDERS';
+
+-- Kullanıcının sahip olduğu tablo izinlerini kontrol et
+SELECT * FROM DBA_TAB_PRIVS WHERE grantee = 'C##COSMIC_DEFENDERS';
+
+
+GRANT ALL PRIVILEGES ON C##COSMIC_DEFENDERS.* TO C##COSMIC_DEFENDERS;
+GRANT ALL PRIVILEGES ON SYSTEM.* TO C##COSMIC_DEFENDERS;
+
+
+BEGIN
+   FOR t IN (SELECT table_name FROM all_tables WHERE owner = 'C##COSMIC_DEFENDERS') LOOP
+      EXECUTE IMMEDIATE 'GRANT ALL PRIVILEGES ON C##COSMIC_DEFENDERS.' || t.table_name || ' TO C##COSMIC_DEFENDERS';
+   END LOOP;
+END;
+
+
+
+
