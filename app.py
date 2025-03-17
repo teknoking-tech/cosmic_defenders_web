@@ -326,8 +326,55 @@ def protected():
 def admin_only():
     return jsonify({"message": "Admin paneline hoş geldiniz!"}), 200
 
-# Örnek oyuncu endpoint'i
-# Add these routes
+@app.route('/admin/update-user-role', methods=['POST'])
+@role_required(['admin'])
+def update_user_role():
+    data = request.get_json()
+    if not data or not data.get('user_id') or not data.get('new_role'):
+        return jsonify({'message': 'Eksik bilgi!'}), 400
+    
+    new_role = data['new_role']
+    if new_role not in ['player', 'admin']:
+        return jsonify({'message': 'Geçersiz rol!'}), 400
+    
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute("UPDATE users SET role = :1 WHERE user_id = :2", (new_role, data['user_id']))
+        conn.commit()
+        
+        cursor.close()
+        conn.close()
+        
+        return jsonify({'message': 'Kullanıcı rolü başarıyla güncellendi!'}), 200
+        
+    except oracledb.DatabaseError as e:
+        error, = e.args
+        return jsonify({'message': 'Veritabanı hatası!', 'error': error.message}), 500
+
+@app.route('/admin/delete-user', methods=['DELETE'])
+@role_required(['admin'])
+def delete_user():
+    data = request.get_json()
+    if not data or not data.get('user_id'):
+        return jsonify({'message': 'Eksik bilgi!'}), 400
+    
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute("DELETE FROM users WHERE user_id = :1", (data['user_id'],))
+        conn.commit()
+        
+        cursor.close()
+        conn.close()
+        
+        return jsonify({'message': 'Kullanıcı başarıyla silindi!'}), 200
+        
+    except oracledb.DatabaseError as e:
+        error, = e.args
+        return jsonify({'message': 'Veritabanı hatası!', 'error': error.message}), 500
 @app.route('/player-stats', methods=['GET'])
 @token_required
 def player_stats():
@@ -336,15 +383,35 @@ def player_stats():
     data = jwt.decode(token, app.config['SECRET_KEY'], algorithms=["HS256"])
     user_id = data['user_id']
     
-    # Return sample data for now
-    return jsonify({
-        "message": "Oyuncu istatistikleri başarıyla alındı",
-        "games": 27,
-        "wins": 18,
-        "losses": 9,
-        "total_score": 1240,
-        "highest_score": 215
-    }), 200
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        # Fetch player stats from the database
+        cursor.execute("""
+            SELECT games_played, wins, losses, total_score, highest_score
+            FROM player_stats
+            WHERE user_id = :1
+        """, (user_id,))
+        stats = cursor.fetchone()
+        
+        cursor.close()
+        conn.close()
+        
+        if stats:
+            return jsonify({
+                "message": "Oyuncu istatistikleri başarıyla alındı",
+                "games": stats[0],
+                "wins": stats[1],
+                "losses": stats[2],
+                "total_score": stats[3],
+                "highest_score": stats[4]
+            }), 200
+        else:
+            return jsonify({"message": "Oyuncu istatistikleri bulunamadı!"}), 404
+            
+    except Exception as e:
+        return jsonify({'message': 'Veritabanı hatası!', 'error': str(e)}), 500
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=8000)
