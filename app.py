@@ -212,6 +212,24 @@ def role_required(allowed_roles):
         return decorated_function
     return decorator
 
+
+@app.route('/test-db', methods=['GET'])
+def test_db():
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute("SELECT 1 FROM DUAL")
+        result = cursor.fetchone()
+        cursor.close()
+        conn.close()
+        
+        if result:
+            return jsonify({'message': 'Veritabanı bağlantısı başarılı!', 'result': result[0]}), 200
+        else:
+            return jsonify({'message': 'Veritabanı bağlantısı başarılı ancak veri alınamadı.'}), 500
+            
+    except Exception as e:
+        return jsonify({'message': 'Veritabanı hatası!', 'error': str(e)}), 500
 @app.route('/')
 def home():
     return jsonify({'message': 'Uygulama çalışıyor!'}), 200
