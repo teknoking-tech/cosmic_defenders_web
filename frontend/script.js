@@ -1,5 +1,6 @@
 // API URL
-const API_URL = 'http://172.29.0.2:8000';
+const API_URL = 'http://game-api-container:8000';
+
 // DOM elementleri
 const homeLink = document.getElementById('home-link');
 const loginLink = document.getElementById('login-link');
