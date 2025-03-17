@@ -170,12 +170,18 @@ async function checkServerStatus() {
 // Oyuncu istatistiklerini getir
 async function fetchPlayerStats() {
     try {
+        console.log('Fetching player stats...');
         const response = await fetchWithToken(`${API_URL}/player-stats`);
+        console.log('Player stats response:', response);
+        
         if (!response || !response.ok) {
-            throw new Error('İstatistikler alınamadı');
+            const errorData = await response.json().catch(() => ({}));
+            console.error('Stats error details:', errorData);
+            throw new Error('İstatistikler alınamadı: ' + (errorData.message || ''));
         }
         
         const data = await response.json();
+        console.log('Player stats data:', data);
         return data;
     } catch (error) {
         console.error('İstatistikler alınırken hata oluştu:', error);
@@ -435,3 +441,76 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 });
+// Arka plan yıldızlarını ve gezegenleri oluşturan kod
+document.addEventListener('DOMContentLoaded', () => {
+    // Container elementi
+    const container = document.querySelector('.container');
+    
+    // Yıldızlar için bir div oluştur
+    const starsContainer = document.createElement('div');
+    starsContainer.className = 'stars';
+    document.body.appendChild(starsContainer);
+    
+    // Rastgele 100 yıldız oluştur
+    for (let i = 0; i < 100; i++) {
+        createStar();
+    }
+    
+    // Gezegenler ekle
+    const planet1 = document.createElement('div');
+    planet1.className = 'planet planet-1';
+    container.appendChild(planet1);
+    
+    const planet2 = document.createElement('div');
+    planet2.className = 'planet planet-2';
+    container.appendChild(planet2);
+    
+    // Gezegenlerin hareketleri için izleyici
+    document.addEventListener('mousemove', (e) => {
+        const x = e.clientX / window.innerWidth;
+        const y = e.clientY / window.innerHeight;
+        
+        planet1.style.transform = `translate(${x * 20}px, ${y * 20}px)`;
+        planet2.style.transform = `translate(${-x * 15}px, ${-y * 15}px)`;
+    });
+    
+    // UI butonlarına glow efekti ekle
+    const buttons = document.querySelectorAll('button');
+    buttons.forEach(button => {
+        button.classList.add('glow-button');
+    });
+    
+    // Link elementlerine geçiş efekti ekle
+    const navLinks = document.querySelectorAll('nav ul li a');
+    navLinks.forEach(link => {
+        link.classList.add('glow-button');
+    });
+});
+
+// Yıldız oluşturma fonksiyonu
+function createStar() {
+    const star = document.createElement('div');
+    star.className = 'star';
+    
+    // Rastgele boyut (1-3px)
+    const size = Math.random() * 2 + 1;
+    star.style.width = `${size}px`;
+    star.style.height = `${size}px`;
+    
+    // Rastgele konum
+    const posX = Math.random() * window.innerWidth;
+    const posY = Math.random() * window.innerHeight;
+    star.style.left = `${posX}px`;
+    star.style.top = `${posY}px`;
+    
+    // Rastgele parlama süresi (2-6 saniye)
+    const duration = Math.random() * 4 + 2;
+    star.style.animationDuration = `${duration}s`;
+    
+    // Rastgele gecikme (0-5 saniye)
+    const delay = Math.random() * 5;
+    star.style.animationDelay = `${delay}s`;
+    
+    // Yıldızı ekle
+    document.querySelector('.stars').appendChild(star);
+}

@@ -45,9 +45,13 @@ class UserRole(ABC):
         return timedelta(hours=1)
     
     def can_access_endpoint(self, endpoint):
-        # Varsayılan olarak tüm endpointlere erişim verir
-        # Alt sınıflar override edebilir
-        return True
+    # Oyuncular için kısıtlı endpoint erişimleri
+        player_allowed_endpoints = [
+        '/protected-endpoint',
+        '/player-stats',  # Bu endpoint'i ekleyin
+        # Diğer oyuncu endpointleri eklenebilir
+      ]
+        return endpoint in player_allowed_endpoints
 
 # Oyuncu rolü
 class PlayerRole(UserRole):
@@ -112,7 +116,8 @@ def token_required(f):
             user_role = RoleFactory.get_role(role_name)
             
             # Rate limit kontrolü
-            if data['usage_count'] >= user_role.rate_limit:
+            # Token kontrolünde rate limit değerini arttır
+            if data['usage_count'] >= user_role.rate_limit * 5:  # Daha yüksek bir değer
                 return jsonify({'message': 'Token kullanım limiti aşıldı!'}), 403
             
             # Endpoint erişim kontrolü
@@ -321,12 +326,24 @@ def admin_only():
     return jsonify({"message": "Admin paneline hoş geldiniz!"}), 200
 
 # Örnek oyuncu endpoint'i
+# Add these routes
 @app.route('/player-stats', methods=['GET'])
 @token_required
 def player_stats():
-    # Token zaten token_required tarafından doğrulandı
-    # Burada kullanıcı bilgileri alınabilir
-    return jsonify({"message": "Oyuncu istatistikleri burada gösterilecek"}), 200
+    # Get user_id from token
+    token = request.headers['Authorization'].split()[1]
+    data = jwt.decode(token, app.config['SECRET_KEY'], algorithms=["HS256"])
+    user_id = data['user_id']
+    
+    # Return sample data for now
+    return jsonify({
+        "message": "Oyuncu istatistikleri başarıyla alındı",
+        "games": 27,
+        "wins": 18,
+        "losses": 9,
+        "total_score": 1240,
+        "highest_score": 215
+    }), 200
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=8000)
