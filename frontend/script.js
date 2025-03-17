@@ -1,5 +1,5 @@
 // API URL - Use relative path for better compatibility
-const API_URL = 'http://localhost:8000';  // Veya gerçek sunucu adresi
+const API_URL = '/api';  // Veya gerçek sunucu adresi
 
 // DOM elementleri
 const homeLink = document.getElementById('home-link');
@@ -186,12 +186,25 @@ async function fetchPlayerStats() {
         console.log('Player stats response:', response);
         
         if (!response || !response.ok) {
-            const errorData = await response.json().catch(() => ({}));
-            console.error('Stats error details:', errorData);
-            throw new Error('İstatistikler alınamadı: ' + (errorData.message || ''));
+            if (response) {
+                const responseText = await response.text();
+                console.error('Error response content:', responseText);
+                throw new Error('İstatistikler alınamadı: HTTP ' + response.status);
+            } else {
+                throw new Error('Yanıt alınamadı');
+            }
         }
         
-        const data = await response.json();
+        const responseText = await response.text();
+        console.log('Raw response:', responseText);
+        
+        let data;
+        try {
+            data = JSON.parse(responseText);
+        } catch (parseError) {
+            console.error('JSON parse error:', parseError, 'Raw text:', responseText);
+            throw new Error('Geçersiz JSON yanıtı');
+        }       
         console.log('Player stats data:', data);
         return data;
     } catch (error) {

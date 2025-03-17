@@ -64,9 +64,10 @@ class PlayerRole(UserRole):
         return 5
     
     def can_access_endpoint(self, endpoint):
-        # Oyuncular için kısıtlı endpoint erişimleri
+        # Oyuncular için izin verilen endpoint'ler
         player_allowed_endpoints = [
             '/protected-endpoint',
+            '/player-stats',  # Bu endpoint'i ekleyin
             # Diğer oyuncu endpointleri eklenebilir
         ]
         return endpoint in player_allowed_endpoints
