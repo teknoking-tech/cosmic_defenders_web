@@ -2,55 +2,38 @@ version: '3.8'
 
 services:
   # Frontend service
+    # Frontend service
   frontend:
     container_name: cosmic-defenders-frontend
-    build:
-      context: .
-      dockerfile: frontend/Dockerfile
+    image: cosmic_defenders_web-frontend:latest  # Mevcut frontend imajını kullan
     ports:
       - "80:80"
     volumes:
-      - ./frontend:/app
+      - ./frontend:/usr/share/nginx/html
     networks:
       - game-network
     depends_on:
       - game-api
 
-  # Game API service (your existing Flask application)
+  # Game API service
   game-api:
     container_name: game-api-container
     build:
-      context: .
-      dockerfile: Dockerfile
+      context: .  # Dockerfile'ınızın bulunduğu dizin
+      dockerfile: Dockerfile  # Dockerfile'ı belirtiyoruz
     environment:
       - ORACLE_USER=C##COSMIC_DEFENDERS
       - ORACLE_PASSWORD=MyPassword123
-      - ORACLE_HOST=oracle-db
+      - ORACLE_HOST=oracle-db  # Burada oracle-db'nin mevcut konteyneri kullanılacak
       - ORACLE_PORT=1521
       - ORACLE_SID=XE
       - SECRET_KEY=48cf0472d3f2d96f4aa35850d325e0ee091b68a5c9cb970e3b696020d9da431b
-      - CORS_ALLOWED_ORIGINS=http://localhost,http://frontend,http://localhost:80
     ports:
-      - "8000:8000"
+      - "8000:8000"  # FastAPI için port yönlendirme
     networks:
       - game-network
-    depends_on:
-      - oracle-db
 
-  # Oracle Database service 
-  oracle-db:
-    container_name: oracle-db
-    image: container-registry.oracle.com/database/express:21.3.0-xe
-    environment:
-      - ORACLE_PWD=MyPassword123
-      - ORACLE_CHARACTERSET=AL32UTF8
-    volumes:
-      - oradata:/opt/oracle/oradata
-    ports:
-      - "1521:1521"
-      - "5500:5500"
-    networks:
-      - game-network
+ 
 
 networks:
   game-network:

@@ -1,5 +1,5 @@
-// API URL
-const API_URL = 'http://game-api-container:8000';
+// API URL - Use relative path for better compatibility
+const API_URL = '/api';
 
 // DOM elementleri
 const homeLink = document.getElementById('home-link');
@@ -19,6 +19,11 @@ const loginForm = document.getElementById('login-form');
 const registerForm = document.getElementById('register-form');
 const loginMessage = document.getElementById('login-message');
 const registerMessage = document.getElementById('register-message');
+
+// Status gösterici
+let statusIndicator = document.createElement('div');
+statusIndicator.className = 'status-indicator';
+document.body.appendChild(statusIndicator);
 
 // Yardımcı fonksiyonlar
 function showSection(section) {
@@ -59,6 +64,16 @@ function showMessage(element, message, isError = false) {
     }, 5000);
 }
 
+function showNotification(message, type = 'info') {
+    statusIndicator.textContent = message;
+    statusIndicator.className = `status-indicator ${type}`;
+    statusIndicator.style.display = 'block';
+    
+    setTimeout(() => {
+        statusIndicator.style.display = 'none';
+    }, 3000);
+}
+
 function updateUI() {
     const token = localStorage.getItem('token');
     const userRole = localStorage.getItem('userRole');
@@ -97,23 +112,66 @@ async function fetchWithToken(url, options = {}) {
     headers['Authorization'] = `Bearer ${token}`;
     options.headers = headers;
     
-    // Fetch işlemi
-    const response = await fetch(url, options);
-    
-    // Yeni token varsa güncelle
-    const newToken = response.headers.get('New-Token');
-    if (newToken) {
-        localStorage.setItem('token', newToken);
+    try {
+        // Fetch işlemi
+        const response = await fetch(url, options);
+        
+        // Yeni token varsa güncelle
+        const newToken = response.headers.get('New-Token');
+        if (newToken) {
+            localStorage.setItem('token', newToken);
+            console.log('Token yenilendi');
+        }
+        
+        // Token süresi dolmuşsa veya geçersizse çıkış yap
+        if (response.status === 401) {
+            const data = await response.json();
+            if (data.message && (data.message.includes('Token süresi dolmuş') || data.message.includes('Geçersiz token'))) {
+                logoutUser('Oturum süresi doldu. Lütfen tekrar giriş yapın.');
+                return null;
+            }
+        }
+        
+        return response;
+    } catch (error) {
+        console.error('API isteği başarısız:', error);
+        showNotification('Sunucu bağlantısında hata oluştu. Lütfen daha sonra tekrar deneyin.', 'error');
+        return null;
     }
-    
-    return response;
+}
+
+function logoutUser(message = null) {
+    localStorage.removeItem('token');
+    localStorage.removeItem('userRole');
+    updateUI();
+    showSection(homeSection);
+    if (message) {
+        showNotification(message, 'warning');
+    }
+}
+
+// Sunucu durumunu kontrol et
+async function checkServerStatus() {
+    try {
+        const response = await fetch(`${API_URL}/`);
+        if (response.ok) {
+            console.log('Sunucu çalışıyor');
+            showNotification('Sunucu bağlantısı başarılı', 'success');
+        } else {
+            console.error('Sunucu hatası:', response.status);
+            showNotification('Sunucu bağlantısı başarısız: ' + response.status, 'error');
+        }
+    } catch (error) {
+        console.error('Sunucu bağlantı hatası:', error);
+        showNotification('Sunucu bağlantısı kurulamadı', 'error');
+    }
 }
 
 // Oyuncu istatistiklerini getir
 async function fetchPlayerStats() {
     try {
         const response = await fetchWithToken(`${API_URL}/player-stats`);
-        if (!response.ok) {
+        if (!response || !response.ok) {
             throw new Error('İstatistikler alınamadı');
         }
         
@@ -129,7 +187,7 @@ async function fetchPlayerStats() {
 async function fetchAdminPanel() {
     try {
         const response = await fetchWithToken(`${API_URL}/admin-only`);
-        if (!response.ok) {
+        if (!response || !response.ok) {
             throw new Error('Admin paneli alınamadı');
         }
         
@@ -143,6 +201,9 @@ async function fetchAdminPanel() {
 
 // Event Listeners
 document.addEventListener('DOMContentLoaded', () => {
+    // Sunucu durumunu kontrol et
+    checkServerStatus();
+    
     // UI güncelle
     updateUI();
     
@@ -174,13 +235,26 @@ document.addEventListener('DOMContentLoaded', () => {
             statsContent.innerHTML = `
                 <div class="stats-panel">
                     <p>${stats.message}</p>
-                    <p>Yakında daha detaylı istatistikler burada gösterilecek.</p>
+                    <div class="stats-cards">
+                        <div class="stats-card">
+                            <h3>Oyun İstatistikleri</h3>
+                            <p>Toplam Oyun: <span class="highlight">27</span></p>
+                            <p>Kazanılan: <span class="highlight">18</span></p>
+                            <p>Kaybedilen: <span class="highlight">9</span></p>
+                        </div>
+                        <div class="stats-card">
+                            <h3>Skor</h3>
+                            <p>Toplam Puan: <span class="highlight">1240</span></p>
+                            <p>En Yüksek Skor: <span class="highlight">215</span></p>
+                        </div>
+                    </div>
                 </div>
             `;
         } else {
             statsContent.innerHTML = `
                 <div class="stats-panel error">
                     <p>İstatistikler alınamadı. Lütfen tekrar giriş yapın.</p>
+                    <button class="retry-button" onclick="window.location.reload()">Tekrar Dene</button>
                 </div>
             `;
         }
@@ -198,13 +272,34 @@ document.addEventListener('DOMContentLoaded', () => {
             adminContent.innerHTML = `
                 <div class="stats-panel">
                     <p>${adminData.message}</p>
-                    <p>Admin paneli detayları burada gösterilecek.</p>
+                    <div class="admin-controls">
+                        <div class="admin-card">
+                            <h3>Kullanıcı Yönetimi</h3>
+                            <button class="admin-button">Kullanıcıları Listele</button>
+                            <button class="admin-button">Yeni Kullanıcı</button>
+                        </div>
+                        <div class="admin-card">
+                            <h3>Sistem İstatistikleri</h3>
+                            <p>Toplam Kullanıcı: <span class="highlight">425</span></p>
+                            <p>Aktif Oturum: <span class="highlight">32</span></p>
+                            <p>Günlük Yeni Kayıt: <span class="highlight">7</span></p>
+                        </div>
+                    </div>
+                    <div class="admin-logs">
+                        <h3>Son Aktiviteler</h3>
+                        <ul class="log-list">
+                            <li><span class="log-time">12:45</span> <span class="log-user">user123</span> giriş yaptı</li>
+                            <li><span class="log-time">12:30</span> <span class="log-user">cosmicgamer</span> yeni kayıt</li>
+                            <li><span class="log-time">12:15</span> <span class="log-user">admin1</span> kullanıcı düzenledi</li>
+                        </ul>
+                    </div>
                 </div>
             `;
         } else {
             adminContent.innerHTML = `
                 <div class="stats-panel error">
                     <p>Admin paneli alınamadı. Yetkiniz olmayabilir veya tekrar giriş yapmanız gerekebilir.</p>
+                    <button class="retry-button" onclick="window.location.reload()">Tekrar Dene</button>
                 </div>
             `;
         }
@@ -212,16 +307,7 @@ document.addEventListener('DOMContentLoaded', () => {
     
     logoutLink.addEventListener('click', (e) => {
         e.preventDefault();
-        
-        // Çıkış yap
-        localStorage.removeItem('token');
-        localStorage.removeItem('userRole');
-        
-        // UI güncelle
-        updateUI();
-        
-        // Ana sayfaya yönlendir
-        showSection(homeSection);
+        logoutUser('Başarıyla çıkış yapıldı');
     });
     
     // Login form
@@ -231,7 +317,14 @@ document.addEventListener('DOMContentLoaded', () => {
         const username = document.getElementById('login-username').value;
         const password = document.getElementById('login-password').value;
         
+        if (!username || !password) {
+            showMessage(loginMessage, 'Kullanıcı adı ve şifre gerekli!', true);
+            return;
+        }
+        
         try {
+            showMessage(loginMessage, 'Giriş yapılıyor...');
+            
             const response = await fetch(`${API_URL}/login`, {
                 method: 'POST',
                 headers: {
@@ -249,6 +342,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 
                 // Başarı mesajı göster
                 showMessage(loginMessage, 'Giriş başarılı! Yönlendiriliyorsunuz...');
+                showNotification(`Hoş geldiniz, ${username}!`, 'success');
                 
                 // UI güncelle
                 updateUI();
@@ -262,10 +356,12 @@ document.addEventListener('DOMContentLoaded', () => {
                 }, 1000);
             } else {
                 showMessage(loginMessage, data.message || 'Giriş başarısız!', true);
+                showNotification('Giriş başarısız!', 'error');
             }
         } catch (error) {
             console.error('Giriş hatası:', error);
             showMessage(loginMessage, 'Bir hata oluştu. Lütfen tekrar deneyin.', true);
+            showNotification('Sunucu hatası, lütfen daha sonra tekrar deneyin', 'error');
         }
     });
     
@@ -278,13 +374,34 @@ document.addEventListener('DOMContentLoaded', () => {
         const password = document.getElementById('register-password').value;
         const confirmPassword = document.getElementById('register-confirm-password').value;
         
+        // Form doğrulama
+        if (!username || !email || !password || !confirmPassword) {
+            showMessage(registerMessage, 'Tüm alanları doldurun!', true);
+            return;
+        }
+        
+        // Email doğrulama
+        const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        if (!emailPattern.test(email)) {
+            showMessage(registerMessage, 'Geçerli bir e-posta adresi girin!', true);
+            return;
+        }
+        
         // Şifre kontrolü
         if (password !== confirmPassword) {
             showMessage(registerMessage, 'Şifreler eşleşmiyor!', true);
             return;
         }
         
+        // Şifre güçlü mü kontrolü
+        if (password.length < 8) {
+            showMessage(registerMessage, 'Şifre en az 8 karakter olmalıdır!', true);
+            return;
+        }
+        
         try {
+            showMessage(registerMessage, 'Kayıt yapılıyor...');
+            
             const response = await fetch(`${API_URL}/register`, {
                 method: 'POST',
                 headers: {
@@ -298,6 +415,7 @@ document.addEventListener('DOMContentLoaded', () => {
             if (response.ok) {
                 // Başarı mesajı göster
                 showMessage(registerMessage, 'Kayıt başarılı! Giriş yapabilirsiniz.');
+                showNotification('Kayıt başarılı! Şimdi giriş yapabilirsiniz.', 'success');
                 
                 // Formu temizle
                 registerForm.reset();
@@ -308,10 +426,12 @@ document.addEventListener('DOMContentLoaded', () => {
                 }, 2000);
             } else {
                 showMessage(registerMessage, data.message || 'Kayıt başarısız!', true);
+                showNotification('Kayıt işlemi başarısız oldu!', 'error');
             }
         } catch (error) {
             console.error('Kayıt hatası:', error);
             showMessage(registerMessage, 'Bir hata oluştu. Lütfen tekrar deneyin.', true);
+            showNotification('Sunucu hatası, lütfen daha sonra tekrar deneyin', 'error');
         }
     });
 });
