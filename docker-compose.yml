@@ -5,11 +5,13 @@ services:
     # Frontend service
   frontend:
     container_name: cosmic-defenders-frontend
-    image: cosmic_defenders_web-frontend:latest  # Mevcut frontend imajını kullan
+    image: cosmic_defenders_web-frontend:latest
     ports:
       - "80:80"
     volumes:
       - ./frontend:/usr/share/nginx/html
+    environment:
+      - API_URL=http://game-api:8000  # Backend URL'yi ekleyin
     networks:
       - game-network
     depends_on:

@@ -1,5 +1,5 @@
 // API URL - Use relative path for better compatibility
-const API_URL = '/api';
+const API_URL = 'http://localhost:8000';  // Veya gerçek sunucu adresi
 
 // DOM elementleri
 const homeLink = document.getElementById('home-link');
@@ -110,11 +110,22 @@ async function fetchWithToken(url, options = {}) {
     // Headers ekleme
     const headers = options.headers || {};
     headers['Authorization'] = `Bearer ${token}`;
+    headers['Content-Type'] = 'application/json';  // Content-Type ekleyin
     options.headers = headers;
+    
+    // Mode ekleyin
+    options.mode = 'cors';
     
     try {
         // Fetch işlemi
         const response = await fetch(url, options);
+        
+        // Yanıt kontrolü
+        if (!response.ok && response.status !== 401) {
+            console.error('API yanıt hatası:', response.status);
+            const errorData = await response.json().catch(() => ({}));
+            console.error('Hata detayları:', errorData);
+        }
         
         // Yeni token varsa güncelle
         const newToken = response.headers.get('New-Token');
@@ -125,7 +136,7 @@ async function fetchWithToken(url, options = {}) {
         
         // Token süresi dolmuşsa veya geçersizse çıkış yap
         if (response.status === 401) {
-            const data = await response.json();
+            const data = await response.json().catch(() => ({}));
             if (data.message && (data.message.includes('Token süresi dolmuş') || data.message.includes('Geçersiz token'))) {
                 logoutUser('Oturum süresi doldu. Lütfen tekrar giriş yapın.');
                 return null;
