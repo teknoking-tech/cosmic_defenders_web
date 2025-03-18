@@ -180,52 +180,124 @@ async function checkServerStatus() {
 
 // Oyuncu istatistiklerini getir
 async function fetchPlayerStats() {
+    const statsContent = document.getElementById('player-stats-content');
+    statsContent.innerHTML = '<div class="stats-loader">Yükleniyor...</div>';
+
     try {
-        console.log('Fetching player stats...');
         const response = await fetchWithToken(`${API_URL}/player-stats`);
-        console.log('Player stats response:', response);
+        const data = await response.json();
         
-        if (!response || !response.ok) {
-            if (response) {
-                const responseText = await response.text();
-                console.error('Error response content:', responseText);
-                throw new Error('İstatistikler alınamadı: HTTP ' + response.status);
-            } else {
-                throw new Error('Yanıt alınamadı');
-            }
+        if (data.success) {
+            statsContent.innerHTML = `
+                <div class="stats-panel">
+                    <div class="stats-cards">
+                        <div class="stats-card">
+                            <h3>Oyuncu Bilgileri</h3>
+                            <p>Username: <span class="highlight">${data.data.username}</span></p>
+                            <p>Nickname: <span class="highlight">${data.data.nickname}</span></p>
+                            <p>Level: <span class="highlight">${data.data.level}</span></p>
+                            <p>Deneyim: <span class="highlight">${data.data.deneyim}</span></p>
+                        </div>
+                        <div class="stats-card">
+                            <h3>Oyun İstatistikleri</h3>
+                            <p>Toplam Oyun: <span class="highlight">${data.data.total_games}</span></p>
+                            <p>Toplam Skor: <span class="highlight">${data.data.total_score}</span></p>
+                            <p>En Yüksek Skor: <span class="highlight">${data.data.highest_score}</span></p>
+                            <p>Yenilen Düşmanlar: <span class="highlight">${data.data.enemies_defeated}</span></p>
+                            <p>Toplanan Kaynaklar: <span class="highlight">${data.data.resources_collected}</span></p>
+                        </div>
+                    </div>
+                </div>
+            `;
+        } else {
+            throw new Error(data.message);
         }
-        
-        const responseText = await response.text();
-        console.log('Raw response:', responseText);
-        
-        let data;
-        try {
-            data = JSON.parse(responseText);
-        } catch (parseError) {
-            console.error('JSON parse error:', parseError, 'Raw text:', responseText);
-            throw new Error('Geçersiz JSON yanıtı');
-        }       
-        console.log('Player stats data:', data);
-        return data;
     } catch (error) {
         console.error('İstatistikler alınırken hata oluştu:', error);
-        return null;
+        statsContent.innerHTML = `
+            <div class="error-message">
+                <p>İstatistikler alınamadı: ${error.message}</p>
+                <button onclick="location.reload()">Tekrar Dene</button>
+            </div>
+        `;
     }
 }
 
 // Admin panelini getir
 async function fetchAdminPanel() {
+    const adminContent = document.getElementById('admin-panel-content');
+    adminContent.innerHTML = '<div class="admin-loader">Yükleniyor...</div>';
+
     try {
         const response = await fetchWithToken(`${API_URL}/admin-only`);
-        if (!response || !response.ok) {
-            throw new Error('Admin paneli alınamadı');
-        }
-        
         const data = await response.json();
-        return data;
+        
+        if (data.success) {
+            adminContent.innerHTML = `
+                <div class="admin-panel">
+                    <h3>Admin Paneli</h3>
+                    ${data.data.map(user => `
+                        <div class="admin-card">
+                            <p>Username: <span class="highlight">${user.username}</span></p>
+                            <p>Email: <span class="highlight">${user.email}</span></p>
+                            <p>Role: <span class="highlight">${user.role}</span></p>
+                            <p>Nickname: <span class="highlight">${user.nickname}</span></p>
+                            <p>Level: <span class="highlight">${user.level}</span></p>
+                            <p>Deneyim: <span class="highlight">${user.deneyim}</span></p>
+                            <p>Toplam Oyun: <span class="highlight">${user.total_games}</span></p>
+                            <p>Toplam Skor: <span class="highlight">${user.total_score}</span></p>
+                            <p>En Yüksek Skor: <span class="highlight">${user.highest_score}</span></p>
+                            <p>Yenilen Düşmanlar: <span class="highlight">${user.enemies_defeated}</span></p>
+                            <p>Toplanan Kaynaklar: <span class="highlight">${user.resources_collected}</span></p>
+                        </div>
+                    `).join('')}
+                </div>
+            `;
+        } else {
+            throw new Error(data.message);
+        }
     } catch (error) {
         console.error('Admin paneli alınırken hata oluştu:', error);
-        return null;
+        adminContent.innerHTML = `
+            <div class="error-message">
+                <p>Admin paneli alınamadı: ${error.message}</p>
+                <button onclick="location.reload()">Tekrar Dene</button>
+            </div>
+        `;
+    }
+}
+
+async function fetchUserInfo() {
+    const userInfoContent = document.getElementById('user-info-content');
+    userInfoContent.innerHTML = '<div class="info-loader">Yükleniyor...</div>';
+
+    try {
+        const response = await fetchWithToken(`${API_URL}/user-info`);
+        const data = await response.json();
+        
+        if (data.success) {
+            userInfoContent.innerHTML = `
+                <div class="info-panel">
+                    <h3>Kullanıcı Bilgileri</h3>
+                    <p>User ID: <span class="highlight">${data.data.user_id}</span></p>
+                    <p>Username: <span class="highlight">${data.data.username}</span></p>
+                    <p>Email: <span class="highlight">${data.data.email}</span></p>
+                    <p>Role: <span class="highlight">${data.data.role}</span></p>
+                    <p>Created At: <span class="highlight">${data.data.created_at}</span></p>
+                    <p>Last Login: <span class="highlight">${data.data.last_login}</span></p>
+                </div>
+            `;
+        } else {
+            throw new Error(data.message);
+        }
+    } catch (error) {
+        console.error('Kullanıcı bilgileri alınırken hata oluştu:', error);
+        userInfoContent.innerHTML = `
+            <div class="error-message">
+                <p>Kullanıcı bilgileri alınamadı: ${error.message}</p>
+                <button onclick="location.reload()">Tekrar Dene</button>
+            </div>
+        `;
     }
 }
 
@@ -236,6 +308,9 @@ document.addEventListener('DOMContentLoaded', () => {
     
     // UI güncelle
     updateUI();
+    
+    // Kullanıcı bilgilerini getir
+    fetchUserInfo();
     
     // Navigasyon
     homeLink.addEventListener('click', (e) => {

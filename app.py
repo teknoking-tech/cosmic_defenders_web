@@ -8,6 +8,7 @@ from functools import wraps
 from dotenv import load_dotenv
 from datetime import datetime, timedelta, timezone
 from abc import ABC, abstractmethod
+from contextlib import contextmanager
 
 # .env dosyasını yükle
 load_dotenv()
@@ -25,8 +26,75 @@ oracle_sid = os.getenv('ORACLE_SID', 'XE')
 
 oracle_connection_string = f"{oracle_user}/{oracle_password}@{oracle_host}:{oracle_port}/{oracle_sid}"
 
+class DatabaseManager:
+    def __init__(self, connection_string):
+        self.connection_string = connection_string
+
+    @contextmanager
+    def get_connection(self):
+        conn = None
+        try:
+            conn = oracledb.connect(self.connection_string)
+            yield conn
+        finally:
+            if conn:
+                try:
+                    conn.close()
+                except Exception as e:
+                    print(f"Error closing connection: {e}")
+
+    def execute_query(self, query, params=None):
+        with self.get_connection() as conn:
+            with conn.cursor() as cursor:
+                if params:
+                    cursor.execute(query, params)
+                else:
+                    cursor.execute(query)
+                conn.commit()
+                return cursor.fetchall()
+
+db_manager = DatabaseManager(oracle_connection_string)
+
+@contextmanager
 def get_db_connection():
-    return oracledb.connect(oracle_connection_string)
+    """Database connection context manager"""
+    conn = None
+    try:
+        conn = oracledb.connect(oracle_connection_string)
+        yield conn
+    finally:
+        if conn:
+            try:
+                conn.close()
+            except Exception as e:
+                print(f"Error closing connection: {e}")
+
+class BaseModel:
+    def __init__(self, db_manager):
+        self.db_manager = db_manager
+
+class PlayerStats(BaseModel):
+    def __init__(self, db_manager, user_id):
+        super().__init__(db_manager)
+        self.user_id = user_id
+
+    def get_stats(self):
+        query = """
+            SELECT games_played, wins, losses, total_score, highest_score
+            FROM player_stats
+            WHERE user_id = :1
+        """
+        result = self.db_manager.execute_query(query, (self.user_id,))
+        if result:
+            stats = result[0]
+            return {
+                "games": stats[0],
+                "wins": stats[1],
+                "losses": stats[2],
+                "total_score": stats[3],
+                "highest_score": stats[4]
+            }
+        return None
 
 # Kullanıcı rol sınıfları için temel sınıf
 class UserRole(ABC):
@@ -61,14 +129,13 @@ class PlayerRole(UserRole):
     
     @property
     def rate_limit(self):
-        return 5
+        return 5  # Player için rate limit 5
     
     def can_access_endpoint(self, endpoint):
-        # Oyuncular için izin verilen endpoint'ler
         player_allowed_endpoints = [
             '/protected-endpoint',
-            '/player-stats',  # Bu endpoint'i ekleyin
-            # Diğer oyuncu endpointleri eklenebilir
+            '/player-stats',
+            '/refresh-token'
         ]
         return endpoint in player_allowed_endpoints
 
@@ -80,11 +147,10 @@ class AdminRole(UserRole):
     
     @property
     def rate_limit(self):
-        return 10
+        return 10  # Admin için rate limit 10
     
     def can_access_endpoint(self, endpoint):
-        # Adminler tüm endpointlere erişebilir
-        return True
+        return True  # Admin tüm endpointlere erişebilir
 
 # Rol fabrikası
 class RoleFactory:
@@ -106,96 +172,49 @@ def token_required(f):
                 token = bearer.split()[1]
         
         if not token:
-            return jsonify({'message': 'Token gerekli!'}), 401
+            return jsonify({
+                'success': False,
+                'message': 'Token gerekli!'
+            }), 401
         
         try:
-            # Token çözümleme
             data = jwt.decode(token, app.config['SECRET_KEY'], algorithms=["HS256"])
             
-            # Kullanıcı rolünü belirle
-            role_name = data.get('role', 'player')
-            user_role = RoleFactory.get_role(role_name)
-            
             # Rate limit kontrolü
-            # Token kontrolünde rate limit değerini arttır
-            if data['usage_count'] >= user_role.rate_limit * 5:  # Daha yüksek bir değer
-                return jsonify({'message': 'Token kullanım limiti aşıldı!'}), 403
+            if data.get('usage_count', 0) >= 5:  # Sabit rate limit
+                return jsonify({
+                    'success': False,
+                    'message': 'Rate limit aşıldı! (5 istek/token)'
+                }), 429
             
-            # Endpoint erişim kontrolü
-            if not user_role.can_access_endpoint(request.path):
-                return jsonify({'message': 'Bu endpoint için yetkiniz yok!'}), 403
-            
-            # Yeni token oluştur
+            # Token'ı yenile
             new_token = jwt.encode({
                 'user_id': data['user_id'],
-                'role': user_role.role_name,
-                'usage_count': data['usage_count'] + 1,
-                'exp': datetime.now(timezone.utc) + user_role.token_expiry
+                'role': data.get('role', 'player'),
+                'usage_count': data.get('usage_count', 0) + 1,
+                'exp': datetime.now(timezone.utc) + timedelta(hours=1)
             }, app.config['SECRET_KEY'], algorithm="HS256")
             
-            # Hata ayıklama için kullanıcı ID'sini logla
-            print(f"İşlem yapılan kullanıcı ID: {data['user_id']}, Rol: {user_role.role_name}")
+            response = make_response(f(*args, **kwargs))
+            response.headers['New-Token'] = new_token
+            return response
             
-            try:
-                # Orijinal fonksiyonu çağır ve yanıtı al
-                original_response = f(*args, **kwargs)
-                
-                # Yanıt tipini logla - hata ayıklama için
-                print(f"Fonksiyon yanıt tipi: {type(original_response)}")
-                
-                # Yanıt tipine göre işleme
-                if isinstance(original_response, Response):
-                    # Response nesnesi kopya oluşturmadan header ekle
-                    original_response.headers['New-Token'] = new_token
-                    return original_response
-                
-                elif isinstance(original_response, tuple) and len(original_response) == 2:
-                    # (data, status_code) şeklinde tuple
-                    response_body, status_code = original_response
-                    # Tuple içindeki veri tipini kontrol et
-                    print(f"Tuple içindeki veri tipi: {type(response_body)}")
-                    
-                    if isinstance(response_body, dict):
-                        response = make_response(jsonify(response_body), status_code)
-                    else:
-                        # Dict değilse güvenli dönüşüm
-                        response = make_response(str(response_body), status_code)
-                    
-                    response.headers['New-Token'] = new_token
-                    return response
-                
-                elif isinstance(original_response, dict):
-                    # Dict ise jsonify kullan
-                    response = make_response(jsonify(original_response))
-                    response.headers['New-Token'] = new_token
-                    return response
-                
-                else:
-                    # String veya diğer tipler için
-                    print(f"Diğer tip yanıt: {original_response}")
-                    try:
-                        # Önce JSON yapılabilir mi kontrol et
-                        json_response = jsonify({"message": str(original_response)})
-                        response = make_response(json_response)
-                    except:
-                        # JSON yapılamazsa string olarak dön
-                        response = make_response(str(original_response))
-                    
-                    response.headers['New-Token'] = new_token
-                    return response
-                
-            except Exception as func_error:
-                # Orijinal fonksiyon çağrısında hata
-                print(f"Fonksiyon çağrı hatası: {str(func_error)}")
-                return jsonify({'message': f'İşlem hatası: {str(func_error)}'}), 500
-                
         except jwt.ExpiredSignatureError:
-            return jsonify({'message': 'Token süresi dolmuş!'}), 401
+            return jsonify({
+                'success': False,
+                'message': 'Token süresi dolmuş!'
+            }), 401
         except jwt.InvalidTokenError:
-            return jsonify({'message': 'Geçersiz token!'}), 401
+            return jsonify({
+                'success': False,
+                'message': 'Geçersiz token!'
+            }), 401
         except Exception as e:
-            print(f"Token doğrulama hatası: {str(e)}")
-            return jsonify({'message': f'Token doğrulama hatası!'}), 500
+            return jsonify({
+                'success': False,
+                'message': 'Token doğrulama hatası!',
+                'error': str(e)
+            }), 500
     
     return decorated
 
@@ -222,20 +241,16 @@ def role_required(allowed_roles):
 @app.route('/test-db', methods=['GET'])
 def test_db():
     try:
-        conn = get_db_connection()
-        cursor = conn.cursor()
-        cursor.execute("SELECT 1 FROM DUAL")
-        result = cursor.fetchone()
-        cursor.close()
-        conn.close()
+        result = db_manager.execute_query("SELECT 1 FROM DUAL")
         
         if result:
-            return jsonify({'message': 'Veritabanı bağlantısı başarılı!', 'result': result[0]}), 200
+            return jsonify({'message': 'Veritabanı bağlantısı başarılı!', 'result': result[0][0]}), 200
         else:
             return jsonify({'message': 'Veritabanı bağlantısı başarılı ancak veri alınamadı.'}), 500
             
     except Exception as e:
         return jsonify({'message': 'Veritabanı hatası!', 'error': str(e)}), 500
+
 @app.route('/')
 def home():
     return jsonify({'message': 'Uygulama çalışıyor!'}), 200
@@ -255,24 +270,34 @@ def register():
         role = 'player'  # Geçersiz roller için varsayılan player
     
     try:
-        conn = get_db_connection()
-        cursor = conn.cursor()
-        
-        user_id_var = cursor.var(int)
-        cursor.execute("INSERT INTO users (username, password, email, role) VALUES (:1, :2, :3, :4) RETURNING user_id INTO :5", 
-                       (data['username'], hashed_password, data['email'], role, user_id_var))
-        
-        conn.commit()
-        user_id = user_id_var.getvalue()[0]
-        
-        cursor.close()
-        conn.close()
-        
-        return jsonify({'message': 'Kullanıcı başarıyla oluşturuldu!', 'user_id': user_id, 'role': role}), 201
-        
+        with get_db_connection() as conn:
+            cursor = conn.cursor()
+            # Oracle OUT parameter için var tanımla
+            user_id_var = cursor.var(int)
+            
+            cursor.execute("""
+                INSERT INTO users (username, password, email, role) 
+                VALUES (:1, :2, :3, :4) 
+                RETURNING user_id INTO :5
+            """, (data['username'], hashed_password, data['email'], role, user_id_var))
+            
+            conn.commit()
+            user_id = user_id_var.getvalue()[0]
+            
+            return jsonify({
+                'success': True,
+                'message': 'Kullanıcı başarıyla oluşturuldu!', 
+                'user_id': user_id, 
+                'role': role
+            }), 201
+            
     except oracledb.DatabaseError as e:
         error, = e.args
-        return jsonify({'message': 'Veritabanı hatası!', 'error': error.message}), 500
+        return jsonify({
+            'success': False,
+            'message': 'Veritabanı hatası!', 
+            'error': error.message
+        }), 500
 
 @app.route('/login', methods=['POST'])
 def login():
@@ -282,28 +307,34 @@ def login():
         return jsonify({'message': 'Eksik bilgi!'}), 400
     
     try:
-        conn = get_db_connection()
-        cursor = conn.cursor()
-        cursor.execute("SELECT * FROM users WHERE username = :1", (data['username'],))
-        user = cursor.fetchone()
+        query = "SELECT * FROM users WHERE username = :1"
+        params = (data['username'],)
+        user = db_manager.execute_query(query, params)
+        print("User query result:", user)  # Hata ayıklama için
+        
+        if not user:
+            return jsonify({'message': 'Geçersiz kullanıcı adı veya şifre!'}), 401
 
-        if not user or not bcrypt.checkpw(data['password'].encode('utf-8'), user[2].encode('utf-8')):
+        # Kullanıcı tablodaki kolon sırası: [user_id, username, password, email, role, ...]
+        stored_password = user[0][2]
+        # Eğer stored_password None veya boş ise, ilgili kullanıcı kayıtında sorun var
+        if not stored_password:
+            return jsonify({'message': 'Kullanıcı parolası okunamadı!'}), 401
+
+        if not bcrypt.checkpw(data['password'].encode('utf-8'), stored_password.encode('utf-8')):
             return jsonify({'message': 'Geçersiz kullanıcı adı veya şifre!'}), 401
         
         # Kullanıcı rolünü belirle
-        role = user[4] if user[4] in ['player', 'admin'] else 'player'
+        role = user[0][4] if user[0][4] in ['player', 'admin'] else 'player'
         user_role = RoleFactory.get_role(role)
         
         # Token üret
         token = jwt.encode({
-            'user_id': user[0],
+            'user_id': user[0][0],
             'role': role,
             'usage_count': 0,
             'exp': datetime.now(timezone.utc) + user_role.token_expiry
         }, app.config['SECRET_KEY'], algorithm="HS256")
-        
-        cursor.close()
-        conn.close()
 
         return jsonify({
             'token': token,
@@ -311,9 +342,9 @@ def login():
             'rate_limit': user_role.rate_limit
         }), 200
         
-    except oracledb.DatabaseError as e:
-        error, = e.args
-        return jsonify({'message': 'Veritabanı hatası!', 'error': error.message}), 500
+    except Exception as e:
+        print("Login error:", str(e))
+        return jsonify({'message': 'Veritabanı hatası!', 'error': str(e)}), 500
 
 @app.route('/protected-endpoint', methods=['GET'])
 @token_required
@@ -324,7 +355,54 @@ def protected():
 @app.route('/admin-only', methods=['GET'])
 @role_required(['admin'])
 def admin_only():
-    return jsonify({"message": "Admin paneline hoş geldiniz!"}), 200
+    try:
+        query = """
+            SELECT 
+                u.username,
+                u.email,
+                u.role,
+                pp.nickname,
+                pp.player_level,
+                pp.experience_points,
+                COUNT(gs.score_id) AS total_games,
+                COALESCE(SUM(gs.score), 0) AS total_score,
+                COALESCE(MAX(gs.score), 0) AS highest_score,
+                COALESCE(SUM(gs.enemies_defeated), 0) AS enemies_defeated,
+                COALESCE(SUM(gs.resources_collected), 0) AS resources_collected
+            FROM users u
+            LEFT JOIN player_profiles pp ON u.user_id = pp.user_id
+            LEFT JOIN game_scores gs ON pp.profile_id = gs.profile_id
+            GROUP BY u.username, u.email, u.role, pp.nickname, pp.player_level, pp.experience_points
+        """
+        result = db_manager.execute_query(query)
+        print("Admin panel query result:", result)
+
+        users = [{
+            'username': user[0],
+            'email': user[1],
+            'role': user[2],
+            'nickname': user[3],
+            'level': user[4],
+            'deneyim': user[5],
+            'total_games': user[6],
+            'total_score': user[7],
+            'highest_score': user[8],
+            'enemies_defeated': user[9],
+            'resources_collected': user[10]
+        } for user in result]
+
+        return jsonify({
+            'success': True,
+            'message': 'Admin paneli verileri başarıyla alındı',
+            'data': users
+        }), 200
+        
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'message': 'Veri alınamadı',
+            'error': str(e)
+        }), 500
 
 @app.route('/admin/update-user-role', methods=['POST'])
 @role_required(['admin'])
@@ -338,14 +416,9 @@ def update_user_role():
         return jsonify({'message': 'Geçersiz rol!'}), 400
     
     try:
-        conn = get_db_connection()
-        cursor = conn.cursor()
-        
-        cursor.execute("UPDATE users SET role = :1 WHERE user_id = :2", (new_role, data['user_id']))
-        conn.commit()
-        
-        cursor.close()
-        conn.close()
+        query = "UPDATE users SET role = :1 WHERE user_id = :2"
+        params = (new_role, data['user_id'])
+        db_manager.execute_query(query, params)
         
         return jsonify({'message': 'Kullanıcı rolü başarıyla güncellendi!'}), 200
         
@@ -361,57 +434,151 @@ def delete_user():
         return jsonify({'message': 'Eksik bilgi!'}), 400
     
     try:
-        conn = get_db_connection()
-        cursor = conn.cursor()
-        
-        cursor.execute("DELETE FROM users WHERE user_id = :1", (data['user_id'],))
-        conn.commit()
-        
-        cursor.close()
-        conn.close()
+        query = "DELETE FROM users WHERE user_id = :1"
+        params = (data['user_id'],)
+        db_manager.execute_query(query, params)
         
         return jsonify({'message': 'Kullanıcı başarıyla silindi!'}), 200
         
     except oracledb.DatabaseError as e:
         error, = e.args
         return jsonify({'message': 'Veritabanı hatası!', 'error': error.message}), 500
+
 @app.route('/player-stats', methods=['GET'])
 @token_required
 def player_stats():
-    # Get user_id from token
-    token = request.headers['Authorization'].split()[1]
-    data = jwt.decode(token, app.config['SECRET_KEY'], algorithms=["HS256"])
-    user_id = data['user_id']
-    
     try:
-        conn = get_db_connection()
-        cursor = conn.cursor()
+        token = request.headers['Authorization'].split()[1]
+        payload = jwt.decode(token, app.config['SECRET_KEY'], algorithms=["HS256"])
+        user_id = payload.get('user_id')
+        if not user_id:
+            return jsonify({'success': False, 'message': 'User ID bulunamadı!'}), 400
+
+        query = """
+            SELECT 
+                u.username,
+                pp.nickname,
+                pp.player_level,
+                pp.experience_points AS deneyim,
+                COUNT(gs.score_id) AS total_games,
+                COALESCE(SUM(gs.score), 0) AS total_score,
+                COALESCE(MAX(gs.score), 0) AS highest_score,
+                COALESCE(SUM(gs.enemies_defeated), 0) AS enemies_defeated,
+                COALESCE(SUM(gs.resources_collected), 0) AS resources_collected
+            FROM users u
+            JOIN player_profiles pp ON u.user_id = pp.user_id
+            LEFT JOIN game_scores gs ON pp.profile_id = gs.profile_id
+            WHERE u.user_id = :1
+            GROUP BY u.username, pp.nickname, pp.player_level, pp.experience_points
+        """
+        print(f"Fetching stats for user_id: {user_id}")
+        result = db_manager.execute_query(query, (user_id,))
+        print("Query result:", result)
         
-        # Fetch player stats from the database
-        cursor.execute("""
-            SELECT games_played, wins, losses, total_score, highest_score
-            FROM player_stats
-            WHERE user_id = :1
-        """, (user_id,))
-        stats = cursor.fetchone()
+        # Eğer oyuncu bilgisi bulunamazsa, varsayılan bir profil oluştur
+        if not result or len(result) == 0:
+            print("No player profile found, creating default profile...")
+            with get_db_connection() as conn:
+                cursor = conn.cursor()
+                default_nickname = f"Player_{user_id}"
+                insert_query = """
+                    INSERT INTO player_profiles (user_id, nickname, player_level, experience_points)
+                    VALUES (:1, :2, 1, 0)
+                """
+                cursor.execute(insert_query, (user_id, default_nickname))
+                conn.commit()
+            # Tekrar sorgulamayı yapalım:
+            result = db_manager.execute_query(query, (user_id,))
+            print("Query result after profile creation:", result)
         
-        cursor.close()
-        conn.close()
-        
-        if stats:
+        if result and len(result) > 0:
+            user_data = result[0]
             return jsonify({
-                "message": "Oyuncu istatistikleri başarıyla alındı",
-                "games": stats[0],
-                "wins": stats[1],
-                "losses": stats[2],
-                "total_score": stats[3],
-                "highest_score": stats[4]
+                'success': True,
+                'message': 'İstatistikler başarıyla alındı',
+                'data': {
+                    'username': user_data[0],
+                    'nickname': user_data[1],
+                    'level': user_data[2],
+                    'deneyim': user_data[3],
+                    'total_games': user_data[4],
+                    'total_score': user_data[5],
+                    'highest_score': user_data[6],
+                    'enemies_defeated': user_data[7],
+                    'resources_collected': user_data[8]
+                }
             }), 200
         else:
-            return jsonify({"message": "Oyuncu istatistikleri bulunamadı!"}), 404
-            
+            return jsonify({
+                'success': False,
+                'message': 'Oyuncu bilgileri alınamadı!'
+            }), 404
     except Exception as e:
-        return jsonify({'message': 'Veritabanı hatası!', 'error': str(e)}), 500
+        print("Error:", str(e))
+        return jsonify({
+            'success': False,
+            'message': 'Veri alınamadı',
+            'error': str(e)
+        }), 500
+
+@app.route('/user-info', methods=['GET'])
+@token_required
+def user_info():
+    try:
+        token = request.headers['Authorization'].split()[1]
+        payload = jwt.decode(token, app.config['SECRET_KEY'], algorithms=["HS256"])
+        user_id = payload.get('user_id')
+        if not user_id:
+            return jsonify({'success': False, 'message': 'User ID bulunamadı!'}), 400
+
+        # Rate limit kontrolü
+        if payload.get('usage_count', 0) >= 5:
+            return jsonify({
+                'success': False,
+                'message': 'Rate limit aşıldı! (5 istek/token)'
+            }), 429
+
+        query = """
+            SELECT 
+                user_id,
+                username,
+                email,
+                role,
+                created_at,
+                last_login
+            FROM users
+            WHERE user_id = :1
+        """
+        print(f"Fetching user info for user_id: {user_id}")
+        result = db_manager.execute_query(query, (user_id,))
+        print("Query result:", result)
+        
+        if result and len(result) > 0:
+            user_data = result[0]
+            return jsonify({
+                'success': True,
+                'message': 'Kullanıcı bilgileri başarıyla alındı',
+                'data': {
+                    'user_id': user_data[0],
+                    'username': user_data[1],
+                    'email': user_data[2],
+                    'role': user_data[3],
+                    'created_at': user_data[4],
+                    'last_login': user_data[5]
+                }
+            }), 200
+        else:
+            return jsonify({
+                'success': False,
+                'message': 'Kullanıcı bilgileri alınamadı!'
+            }), 404
+    except Exception as e:
+        print("Error:", str(e))
+        return jsonify({
+            'success': False,
+            'message': 'Veri alınamadı',
+            'error': str(e)
+        }), 500
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=8000)
