@@ -17,6 +17,7 @@ app = Flask(__name__)
 app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'dev_secret_key')
 CORS(app, resources={r"/*": {"origins": "*"}}, supports_credentials=True, expose_headers=["New-Token"])
 
+
 # Oracle bağlantı bilgileri
 oracle_user = os.getenv('ORACLE_USER', 'C##COSMIC_DEFENDERS')
 oracle_password = os.getenv('ORACLE_PASSWORD', 'MyPassword123')
