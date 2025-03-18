@@ -332,82 +332,16 @@ document.addEventListener('DOMContentLoaded', () => {
         e.preventDefault();
         showSection(playerStatsSection);
         
-        const statsContent = document.getElementById('player-stats-content');
-        statsContent.innerHTML = '<div class="stats-loader">Yükleniyor...</div>';
-        
-        const stats = await fetchPlayerStats();
-        if (stats) {
-            statsContent.innerHTML = `
-                <div class="stats-panel">
-                    <p>${stats.message}</p>
-                    <div class="stats-cards">
-                        <div class="stats-card">
-                            <h3>Oyun İstatistikleri</h3>
-                            <p>Toplam Oyun: <span class="highlight">27</span></p>
-                            <p>Kazanılan: <span class="highlight">18</span></p>
-                            <p>Kaybedilen: <span class="highlight">9</span></p>
-                        </div>
-                        <div class="stats-card">
-                            <h3>Skor</h3>
-                            <p>Toplam Puan: <span class="highlight">1240</span></p>
-                            <p>En Yüksek Skor: <span class="highlight">215</span></p>
-                        </div>
-                    </div>
-                </div>
-            `;
-        } else {
-            statsContent.innerHTML = `
-                <div class="stats-panel error">
-                    <p>İstatistikler alınamadı. Lütfen tekrar giriş yapın.</p>
-                    <button class="retry-button" onclick="window.location.reload()">Tekrar Dene</button>
-                </div>
-            `;
-        }
+        // API'den verileri çekmek için fonksiyonu çağır
+        await fetchPlayerStats();
     });
     
     adminPanelLink.addEventListener('click', async (e) => {
         e.preventDefault();
         showSection(adminPanelSection);
         
-        const adminContent = document.getElementById('admin-panel-content');
-        adminContent.innerHTML = '<div class="stats-loader">Yükleniyor...</div>';
-        
-        const adminData = await fetchAdminPanel();
-        if (adminData) {
-            adminContent.innerHTML = `
-                <div class="stats-panel">
-                    <p>${adminData.message}</p>
-                    <div class="admin-controls">
-                        <div class="admin-card">
-                            <h3>Kullanıcı Yönetimi</h3>
-                            <button class="admin-button">Kullanıcıları Listele</button>
-                            <button class="admin-button">Yeni Kullanıcı</button>
-                        </div>
-                        <div class="admin-card">
-                            <h3>Sistem İstatistikleri</h3>
-                            <p>Toplam Kullanıcı: <span class="highlight">425</span></p>
-                            <p>Aktif Oturum: <span class="highlight">32</span></p>
-                            <p>Günlük Yeni Kayıt: <span class="highlight">7</span></p>
-                        </div>
-                    </div>
-                    <div class="admin-logs">
-                        <h3>Son Aktiviteler</h3>
-                        <ul class="log-list">
-                            <li><span class="log-time">12:45</span> <span class="log-user">user123</span> giriş yaptı</li>
-                            <li><span class="log-time">12:30</span> <span class="log-user">cosmicgamer</span> yeni kayıt</li>
-                            <li><span class="log-time">12:15</span> <span class="log-user">admin1</span> kullanıcı düzenledi</li>
-                        </ul>
-                    </div>
-                </div>
-            `;
-        } else {
-            adminContent.innerHTML = `
-                <div class="stats-panel error">
-                    <p>Admin paneli alınamadı. Yetkiniz olmayabilir veya tekrar giriş yapmanız gerekebilir.</p>
-                    <button class="retry-button" onclick="window.location.reload()">Tekrar Dene</button>
-                </div>
-            `;
-        }
+        // API'den verileri çekmek için fonksiyonu çağır
+        await fetchAdminPanel();
     });
     
     logoutLink.addEventListener('click', (e) => {
