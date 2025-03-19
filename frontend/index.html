@@ -103,6 +103,23 @@
                 <div id="admin-panel-content">
                     <div class="stats-loader">Yükleniyor...</div>
                 </div>
+                <div class="sql-query-section">
+                    <h3>SQL Sorgu Asistanı</h3>
+                    <p>Oyuncu verileri hakkında doğal dilde sorular sorun:</p>
+                    <div class="query-examples">
+                        <p>Örnek sorgular:</p>
+                        <ul>
+                            <li>"En yüksek skorlu 5 oyuncuyu göster"</li>
+                            <li>"10'dan fazla oyun oynamış tüm oyuncuları bul"</li>
+                            <li>"5. seviyeden büyük oyuncuları listele"</li>
+                            <li>"En çok düşman yenen oyuncular kimler?"</li>
+                            <li>"En son kaydolan kullanıcıları göster"</li>
+                        </ul>
+                    </div>
+                    <textarea id="sql-query-input" placeholder="Oyuncu verileri hakkında sorunuzu buraya yazın..."></textarea>
+                    <button id="run-sql-query-btn" class="glow-button">Sorguyu Çalıştır</button>
+                    <div id="sql-query-result" class="query-result"></div>
+                </div>
             </section>
 
             <section id="user-info-section" class="section hidden">

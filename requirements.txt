@@ -14,3 +14,10 @@ cryptography==42.0.5
 six==1.16.0
 python-dateutil==2.8.2
 pytz==2024.1
+# LangChain SQL Agent için güncel paketler
+langchain>=0.0.325
+langchain-community>=0.0.15
+langchain-core>=0.1.15
+langchain-openai>=0.0.2
+openai>=1.5.0
+sqlalchemy==2.0.21

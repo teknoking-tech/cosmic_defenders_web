@@ -301,6 +301,145 @@ async function fetchUserInfo() {
     }
 }
 
+async function runSqlQuery() {
+    const queryInput = document.getElementById('sql-query-input');
+    const resultDiv = document.getElementById('sql-query-result');
+    
+    if (!queryInput.value.trim()) {
+        resultDiv.innerHTML = '<div class="error-message">Lütfen bir sorgu girin</div>';
+        return;
+    }
+    
+    resultDiv.innerHTML = '<div class="query-loader">Sorgu çalıştırılıyor... Bu biraz zaman alabilir.</div>';
+    
+    try {
+        const response = await fetchWithToken(`${API_URL}/admin/sql-query`, {
+            method: 'POST',
+            body: JSON.stringify({ query: queryInput.value })
+        });
+        
+        if (!response) {
+            throw new Error('Yanıt alınamadı');
+        }
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            resultDiv.innerHTML = `
+                <div class="query-success">
+                    <h4>Sorgu Sonucu:</h4>
+                    <div class="query-output">${formatQueryResult(data.result)}</div>
+                </div>
+            `;
+        } else {
+            throw new Error(data.message || 'Sorgu başarısız oldu');
+        }
+    } catch (error) {
+        console.error('SQL sorgu hatası:', error);
+        resultDiv.innerHTML = `
+            <div class="error-message">
+                <p>Sorgu çalıştırılırken hata: ${error.message}</p>
+            </div>
+        `;
+    }
+}
+
+// Sorgu sonuçlarını formatlama yardımcı fonksiyonu
+function formatQueryResult(result) {
+    // Eğer sonuç bir string ise (LangChain'den)
+    if (typeof result === 'string') {
+        // Eğer tablo içeriyorsa, formatlamaya çalış
+        if (result.includes('|')) {
+            try {
+                // Basit markdown tablosunu HTML'e dönüştürme
+                const lines = result.split('\n').filter(line => line.trim());
+                let html = '<table class="query-table">';
+                
+                lines.forEach((line, index) => {
+                    const cells = line.split('|').map(cell => cell.trim()).filter(cell => cell);
+                    
+                    if (index === 0) {
+                        // Başlık satırı
+                        html += '<thead><tr>';
+                        cells.forEach(cell => {
+                            html += `<th>${cell}</th>`;
+                        });
+                        html += '</tr></thead><tbody>';
+                    } else if (index === 1 && line.includes('---')) {
+                        // Markdown'da ayırıcı satır, HTML'de atla
+                    } else {
+                        // Veri satırları
+                        html += '<tr>';
+                        cells.forEach(cell => {
+                            html += `<td>${cell}</td>`;
+                        });
+                        html += '</tr>';
+                    }
+                });
+                
+                html += '</tbody></table>';
+                return html;
+            } catch (e) {
+                console.error('Tablo formatlanırken hata:', e);
+                return `<pre>${result}</pre>`;
+            }
+        } else {
+            // Tablo tespit edilmediyse önceden formatlanmış metin olarak döndür
+            return `<pre>${result}</pre>`;
+        }
+    } else if (Array.isArray(result)) {
+        // Eğer obje dizisiyse, tablo oluştur
+        if (result.length === 0) {
+            return '<p>Sonuç bulunamadı</p>';
+        }
+        
+        const keys = Object.keys(result[0]);
+        let html = '<table class="query-table"><thead><tr>';
+        
+        keys.forEach(key => {
+            html += `<th>${key}</th>`;
+        });
+        
+        html += '</tr></thead><tbody>';
+        
+        result.forEach(row => {
+            html += '<tr>';
+            keys.forEach(key => {
+                html += `<td>${row[key]}</td>`;
+            });
+            html += '</tr>';
+        });
+        
+        html += '</tbody></table>';
+        return html;
+    } else {
+        // Diğer türler için JSON formatla
+        return `<pre>${JSON.stringify(result, null, 2)}</pre>`;
+    }
+}
+
+// Mevcut DOMContentLoaded event listener'ınıza ekleyin
+document.addEventListener('DOMContentLoaded', () => {
+    // ... mevcut kodlar ...
+    
+    // SQL Sorgu butonunu dinle
+    const runQueryBtn = document.getElementById('run-sql-query-btn');
+    if (runQueryBtn) {
+        runQueryBtn.addEventListener('click', runSqlQuery);
+        
+        // Textarea'da Ctrl+Enter ile sorgu çalıştırma
+        const queryInput = document.getElementById('sql-query-input');
+        if (queryInput) {
+            queryInput.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter' && e.ctrlKey) {
+                    e.preventDefault();
+                    runSqlQuery();
+                }
+            });
+        }
+    }
+});
+
 // Event Listeners
 document.addEventListener('DOMContentLoaded', () => {
     // Sunucu durumunu kontrol et

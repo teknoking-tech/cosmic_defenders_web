@@ -10,6 +10,13 @@ from datetime import datetime, timedelta, timezone
 from abc import ABC, abstractmethod
 from contextlib import contextmanager
 
+# Güncel LangChain import'ları
+from langchain.agents import create_sql_agent  # Ana langchain paketinden
+from langchain.agents.agent_toolkits import SQLDatabaseToolkit
+from langchain_community.utilities.sql_database import SQLDatabase  # community paketinden
+from langchain_openai import OpenAI  # OpenAI modeli artık ayrı bir pakette
+
+
 # .env dosyasını yükle
 load_dotenv()
 
@@ -27,6 +34,48 @@ oracle_sid = os.getenv('ORACLE_SID', 'XE')
 
 oracle_connection_string = f"{oracle_user}/{oracle_password}@{oracle_host}:{oracle_port}/{oracle_sid}"
 
+
+
+# Güncel kurulum kodu
+def setup_langchain_sql_agent():
+    openai_api_key = os.getenv('OPENAI_API_KEY')
+    if not openai_api_key:
+        print("Uyarı: OPENAI_API_KEY ortam değişkeninde bulunamadı")
+        return None
+    
+    try:
+        # Oracle için SQLAlchemy engine URL'i oluştur (düzeltilmiş format)
+        db_url = f"oracle+oracledb://{oracle_user}:{oracle_password}@{oracle_host}:{oracle_port}/?service_name={oracle_sid}"
+        
+        # SQLDatabase örneği oluştur (güncel path)
+        from langchain_community.utilities.sql_database import SQLDatabase
+        db = SQLDatabase.from_uri(db_url)
+        
+        # OpenAI modeli (güncel path)
+        from langchain_openai import OpenAI
+        llm = OpenAI(temperature=0, api_key=openai_api_key)
+        
+        # SQL toolkit ve agent (güncel yapılandırma)
+        from langchain.agents.agent_toolkits import SQLDatabaseToolkit
+        from langchain.agents import create_sql_agent
+        
+        toolkit = SQLDatabaseToolkit(db=db, llm=llm)
+        
+        # Güncel parametrelerle agent oluşturma
+        agent_executor = create_sql_agent(
+            llm=llm,
+            toolkit=toolkit,
+            verbose=True,
+            agent_type="zero-shot-react-description",  # Eklenmesi gereken önemli parametre
+            max_iterations=5
+        )
+        
+        return agent_executor
+    except Exception as e:
+        print(f"LangChain SQL agent kurulumu sırasında hata: {str(e)}")
+        import traceback
+        traceback.print_exc()  # Ayrıntılı hata takibi için
+        return None
 class DatabaseManager:
     def __init__(self, connection_string):
         self.connection_string = connection_string
@@ -55,6 +104,9 @@ class DatabaseManager:
                 return cursor.fetchall()
 
 db_manager = DatabaseManager(oracle_connection_string)
+
+
+sql_agent = setup_langchain_sql_agent()
 
 @contextmanager
 def get_db_connection():
@@ -346,6 +398,49 @@ def login():
     except Exception as e:
         print("Login error:", str(e))
         return jsonify({'message': 'Veritabanı hatası!', 'error': str(e)}), 500
+    
+
+@app.route('/admin/sql-query', methods=['POST'])
+@role_required(['admin'])
+def admin_sql_query():
+    if not sql_agent:
+        return jsonify({
+            'success': False,
+            'message': 'SQL Agent yapılandırılmamış. OPENAI_API_KEY ayarını kontrol edin.'
+        }), 500
+    
+    data = request.get_json()
+    if not data or not data.get('query'):
+        return jsonify({'success': False, 'message': 'Sorgu parametresi gerekli!'}), 400
+    
+    try:
+        # LangChain SQL agent ile sorguyu çalıştır
+        query = data.get('query')
+        
+        # Güvenlik kontrolü - doğrudan tablo değişikliklerini engelle
+        lower_query = query.lower()
+        if any(keyword in lower_query for keyword in ['drop', 'delete', 'update', 'insert', 'alter', 'truncate']):
+            return jsonify({
+                'success': False,
+                'message': 'Güvenlik nedeniyle, veri değiştirme sorguları kullanılamaz.'
+            }), 403
+        
+        # Sorguyu LangChain üzerinden çalıştır
+        result = sql_agent.run(query)
+        
+        return jsonify({
+            'success': True,
+            'message': 'Sorgu başarıyla çalıştırıldı',
+            'result': result
+        }), 200
+        
+    except Exception as e:
+        print(f"SQL agent hatası: {str(e)}")
+        return jsonify({
+            'success': False,
+            'message': 'Sorgu çalıştırılırken hata oluştu',
+            'error': str(e)
+        }), 500
 
 @app.route('/protected-endpoint', methods=['GET'])
 @token_required
