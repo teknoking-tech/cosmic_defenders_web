@@ -53,7 +53,12 @@ def setup_langchain_sql_agent():
         
         # OpenAI modeli (güncel path)
         from langchain_openai import OpenAI
-        llm = OpenAI(temperature=0, api_key=openai_api_key)
+        llm = OpenAI(
+        temperature=0,
+        api_key=openai_api_key,
+        model="gpt-3.5-turbo",  # OpenAI eski Completion API'si için
+        # Veya model="gpt-3.5-turbo" ve ChatCompletionAPI kullanın
+        )
         
         # SQL toolkit ve agent (güncel yapılandırma)
         from langchain.agents.agent_toolkits import SQLDatabaseToolkit
