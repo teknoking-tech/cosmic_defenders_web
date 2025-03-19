@@ -11,10 +11,11 @@ from abc import ABC, abstractmethod
 from contextlib import contextmanager
 
 # Güncel LangChain import'ları
-from langchain.agents import create_sql_agent  # Ana langchain paketinden
+from langchain.agents import create_sql_agent
+from langchain.agents.agent_types import AgentType
 from langchain.agents.agent_toolkits import SQLDatabaseToolkit
-from langchain_community.utilities.sql_database import SQLDatabase  # community paketinden
-from langchain_openai import OpenAI  # OpenAI modeli artık ayrı bir pakette
+from langchain_community.utilities.sql_database import SQLDatabase
+from langchain_openai import ChatOpenAI  # OpenAI'nin Chat modeli için doğru import
 
 
 # .env dosyasını yükle
@@ -38,31 +39,33 @@ oracle_connection_string = f"{oracle_user}/{oracle_password}@{oracle_host}:{orac
 
 # Güncel kurulum kodu
 def setup_langchain_sql_agent():
+    """LangChain SQL agent kuruluşu"""
     openai_api_key = os.getenv('OPENAI_API_KEY')
     if not openai_api_key:
         print("Uyarı: OPENAI_API_KEY ortam değişkeninde bulunamadı")
         return None
     
     try:
-        # Oracle için SQLAlchemy engine URL'i oluştur (düzeltilmiş format)
+        # Oracle için SQLAlchemy engine URL'i
+        # Oracle dialecti için doğru service_name kullanımı
         db_url = f"oracle+oracledb://{oracle_user}:{oracle_password}@{oracle_host}:{oracle_port}/?service_name={oracle_sid}"
         
-        # SQLDatabase örneği oluştur (güncel path)
+        # SQLDatabase örneği oluştur (güncel path ile)
         from langchain_community.utilities.sql_database import SQLDatabase
         db = SQLDatabase.from_uri(db_url)
         
-        # OpenAI modeli (güncel path)
-        from langchain_openai import OpenAI
-        llm = OpenAI(
-        temperature=0,
-        api_key=openai_api_key,
-        model="gpt-3.5-turbo",  # OpenAI eski Completion API'si için
-        # Veya model="gpt-3.5-turbo" ve ChatCompletionAPI kullanın
+        # ChatOpenAI modeli kullan (eski OpenAI yerine)
+        from langchain_openai import ChatOpenAI
+        llm = ChatOpenAI(
+            temperature=0,
+            api_key=openai_api_key,
+            model="gpt-3.5-turbo"  # Artık doğru model ismi
         )
         
-        # SQL toolkit ve agent (güncel yapılandırma)
+        # SQL toolkit ve agent oluştur
         from langchain.agents.agent_toolkits import SQLDatabaseToolkit
         from langchain.agents import create_sql_agent
+        from langchain.agents.agent_types import AgentType
         
         toolkit = SQLDatabaseToolkit(db=db, llm=llm)
         
@@ -71,16 +74,20 @@ def setup_langchain_sql_agent():
             llm=llm,
             toolkit=toolkit,
             verbose=True,
-            agent_type="zero-shot-react-description",  # Eklenmesi gereken önemli parametre
+            agent_type=AgentType.ZERO_SHOT_REACT_DESCRIPTION,  # Enum kullanımı
             max_iterations=5
         )
         
+        print("LangChain SQL Agent başarıyla kuruldu!")
         return agent_executor
     except Exception as e:
         print(f"LangChain SQL agent kurulumu sırasında hata: {str(e)}")
         import traceback
-        traceback.print_exc()  # Ayrıntılı hata takibi için
+        traceback.print_exc()
         return None
+
+
+
 class DatabaseManager:
     def __init__(self, connection_string):
         self.connection_string = connection_string
@@ -419,28 +426,41 @@ def admin_sql_query():
         return jsonify({'success': False, 'message': 'Sorgu parametresi gerekli!'}), 400
     
     try:
-        # LangChain SQL agent ile sorguyu çalıştır
+        # Sorguyu güvenlik kontrolünden geçir
         query = data.get('query')
+        lower_query = query.lower()
         
         # Güvenlik kontrolü - doğrudan tablo değişikliklerini engelle
-        lower_query = query.lower()
         if any(keyword in lower_query for keyword in ['drop', 'delete', 'update', 'insert', 'alter', 'truncate']):
             return jsonify({
                 'success': False,
                 'message': 'Güvenlik nedeniyle, veri değiştirme sorguları kullanılamaz.'
             }), 403
         
-        # Sorguyu LangChain üzerinden çalıştır
-        result = sql_agent.run(query)
+        print(f"SQL Agent ile sorgu çalıştırılıyor: {query}")
         
-        return jsonify({
-            'success': True,
-            'message': 'Sorgu başarıyla çalıştırıldı',
-            'result': result
-        }), 200
+        # LangChain agent ile sorguyu çalıştır
+        # Daha iyi hata yakalama ve işleme
+        try:
+            result = sql_agent.run(query)
+            print(f"SQL agent sorgu sonucu: {result}")
+            
+            return jsonify({
+                'success': True,
+                'message': 'Sorgu başarıyla çalıştırıldı',
+                'result': result
+            }), 200
+            
+        except Exception as agent_error:
+            print(f"SQL agent çalışma hatası: {str(agent_error)}")
+            return jsonify({
+                'success': False,
+                'message': 'SQL agent sorguyu çalıştıramadı',
+                'error': str(agent_error)
+            }), 500
         
     except Exception as e:
-        print(f"SQL agent hatası: {str(e)}")
+        print(f"Genel SQL agent hatası: {str(e)}")
         return jsonify({
             'success': False,
             'message': 'Sorgu çalıştırılırken hata oluştu',
