@@ -355,27 +355,49 @@ function formatQueryResult(result) {
                 const lines = result.split('\n').filter(line => line.trim());
                 let html = '<table class="query-table">';
                 
-                lines.forEach((line, index) => {
-                    const cells = line.split('|').map(cell => cell.trim()).filter(cell => cell);
+                // Markdown tablosunda header'ı bul
+                let headerIndex = -1;
+                for (let i = 0; i < lines.length; i++) {
+                    if (lines[i].includes('|') && 
+                        i < lines.length - 1 && 
+                        lines[i+1].includes('-+-') || lines[i+1].includes('|-|')) {
+                        headerIndex = i;
+                        break;
+                    }
+                }
+                
+                if (headerIndex === -1) {
+                    // Header bulunamadı, normal metin formatı kullan
+                    return `<pre>${result}</pre>`;
+                }
+                
+                // Header satırını işle
+                const headerCells = lines[headerIndex].split('|')
+                    .map(cell => cell.trim())
+                    .filter(cell => cell);
+                
+                html += '<thead><tr>';
+                headerCells.forEach(cell => {
+                    html += `<th>${cell}</th>`;
+                });
+                html += '</tr></thead><tbody>';
+                
+                // Ayırıcı satırı atla ve veri satırlarını işle
+                for (let i = headerIndex + 2; i < lines.length; i++) {
+                    if (!lines[i].includes('|')) continue;
                     
-                    if (index === 0) {
-                        // Başlık satırı
-                        html += '<thead><tr>';
-                        cells.forEach(cell => {
-                            html += `<th>${cell}</th>`;
-                        });
-                        html += '</tr></thead><tbody>';
-                    } else if (index === 1 && line.includes('---')) {
-                        // Markdown'da ayırıcı satır, HTML'de atla
-                    } else {
-                        // Veri satırları
+                    const cells = lines[i].split('|')
+                        .map(cell => cell.trim())
+                        .filter(cell => cell);
+                    
+                    if (cells.length > 0) {
                         html += '<tr>';
                         cells.forEach(cell => {
                             html += `<td>${cell}</td>`;
                         });
                         html += '</tr>';
                     }
-                });
+                }
                 
                 html += '</tbody></table>';
                 return html;
@@ -383,6 +405,35 @@ function formatQueryResult(result) {
                 console.error('Tablo formatlanırken hata:', e);
                 return `<pre>${result}</pre>`;
             }
+        } else if (result.toLowerCase().includes('sql query:')) {
+            // SQL Agent'ın çıktısını daha iyi formatla
+            const sections = result.split(/(?=SQL query:|Result:|Answer:)/gi);
+            let html = '<div class="query-sections">';
+            
+            sections.forEach(section => {
+                const trimmedSection = section.trim();
+                if (!trimmedSection) return;
+                
+                // Bölüm başlığını belirle
+                let sectionTitle = 'Çıktı';
+                if (trimmedSection.toLowerCase().startsWith('sql query:')) {
+                    sectionTitle = 'SQL Sorgusu';
+                } else if (trimmedSection.toLowerCase().startsWith('result:')) {
+                    sectionTitle = 'Sorgu Sonucu';
+                } else if (trimmedSection.toLowerCase().startsWith('answer:')) {
+                    sectionTitle = 'Yanıt';
+                }
+                
+                html += `
+                    <div class="query-section">
+                        <h5>${sectionTitle}</h5>
+                        <pre>${trimmedSection}</pre>
+                    </div>
+                `;
+            });
+            
+            html += '</div>';
+            return html;
         } else {
             // Tablo tespit edilmediyse önceden formatlanmış metin olarak döndür
             return `<pre>${result}</pre>`;
