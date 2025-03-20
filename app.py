@@ -42,8 +42,11 @@ def setup_langchain_sql_agent():
     """LangChain SQL agent'ı güncel sürüme göre kurar ve yapılandırır."""
     openai_api_key = os.getenv('OPENAI_API_KEY')
     if not openai_api_key:
-        print("Uyarı: OPENAI_API_KEY ortam değişkeninde bulunamadı")
+        print("HATA: OPENAI_API_KEY ortam değişkeninde bulunamadı!")
+        print(f"Mevcut ortam değişkenleri: {list(os.environ.keys())}")
         return None
+    
+    print(f"OpenAI API Anahtarı bulundu.")
     
     try:
         # Oracle bağlantı bilgileri
@@ -56,12 +59,12 @@ def setup_langchain_sql_agent():
         # Oracle için SQLAlchemy connection string
         db_url = f"oracle+oracledb://{oracle_user}:{oracle_password}@{oracle_host}:{oracle_port}/?service_name={oracle_sid}"
         
-        # SQLDatabase oluştur
+        # SQLDatabase oluştur - hata veren parametreleri kaldır
+        # LangChain sürümünüz exclude_tables ve include_tables'ı desteklemiyor
         db = SQLDatabase.from_uri(
             db_url,
             sample_rows_in_table_info=3,  # Her tablodaki örnek satır sayısı
-            include_tables=None,  # Tüm tabloları dahil et (isteğe bağlı olarak belirli tabloları listeleyebilirsiniz)
-            exclude_tables=None,  # Hariç tutulacak tablo yok
+            # include_tables ve exclude_tables parametrelerini kaldırıyoruz
         )
         
         # LLM modeli oluştur (ChatOpenAI)
