@@ -49,29 +49,44 @@ def setup_langchain_sql_agent():
     print(f"OpenAI API Anahtarı bulundu.")
     
     try:
-        # Oracle bağlantı bilgileri
+        # Çalışan Oracle bağlantısını kullan
         oracle_user = os.getenv('ORACLE_USER', 'C##COSMIC_DEFENDERS')
         oracle_password = os.getenv('ORACLE_PASSWORD', 'MyPassword123')
         oracle_host = os.getenv('ORACLE_HOST', 'oracle-db')
         oracle_port = os.getenv('ORACLE_PORT', '1521')
         oracle_sid = os.getenv('ORACLE_SID', 'XE')
         
-        # Oracle için SQLAlchemy connection string
+        # LangChain için doğru Oracle connection string formatını kullan
+        # SQLAlchemy için oracledb sürücüsünü kullanırken SID yerine service_name kullan
         db_url = f"oracle+oracledb://{oracle_user}:{oracle_password}@{oracle_host}:{oracle_port}/?service_name={oracle_sid}"
         
-        # SQLDatabase oluştur - hata veren parametreleri kaldır
-        # LangChain sürümünüz exclude_tables ve include_tables'ı desteklemiyor
+        print(f"Veritabanı bağlantı URL'si: {db_url}")
+        
+        try:
+            # Önce bağlantıyı test et
+            import sqlalchemy
+            engine = sqlalchemy.create_engine(db_url)
+            with engine.connect() as connection:
+                result = connection.execute(sqlalchemy.text("SELECT 1 FROM DUAL"))
+                print(f"Veritabanı bağlantı testi sonucu: {list(result)}")
+        except Exception as conn_err:
+            print(f"Veritabanı bağlantı testi hatası: {str(conn_err)}")
+            
+            # Alternatif bağlantı formatı dene (SID kullanarak)
+            db_url = f"oracle+oracledb://{oracle_user}:{oracle_password}@{oracle_host}:{oracle_port}/{oracle_sid}"
+            print(f"Alternatif bağlantı URL'si deneniyor: {db_url}")
+        
+        # SQLDatabase oluştur
         db = SQLDatabase.from_uri(
             db_url,
-            sample_rows_in_table_info=3,  # Her tablodaki örnek satır sayısı
-            # include_tables ve exclude_tables parametrelerini kaldırıyoruz
+            sample_rows_in_table_info=3,
         )
         
         # LLM modeli oluştur (ChatOpenAI)
         llm = ChatOpenAI(
-            temperature=0,  # Deterministik yanıtlar için
+            temperature=0,
             api_key=openai_api_key,
-            model="gpt-3.5-turbo",  # veya gpt-4 daha iyi SQL anlama için
+            model="gpt-3.5-turbo",
         )
         
         # SQL toolkit oluştur
@@ -84,10 +99,10 @@ def setup_langchain_sql_agent():
         agent_executor = create_sql_agent(
             llm=llm,
             toolkit=toolkit,
-            verbose=True,  # Ayrıntılı çıktı için
-            agent_type=AgentType.OPENAI_FUNCTIONS,  # En son ve verimli agent tipi
-            max_iterations=5,  # Maximum düşünme turları
-            handle_parsing_errors=True  # Ayrıştırma hatalarını otomatik ele alır
+            verbose=True,
+            agent_type=AgentType.OPENAI_FUNCTIONS,
+            max_iterations=5,
+            handle_parsing_errors=True
         )
         
         print("LangChain SQL Agent başarıyla kuruldu!")
@@ -427,55 +442,126 @@ def login():
 @app.route('/admin/sql-query', methods=['POST'])
 @role_required(['admin'])
 def admin_sql_query():
+    global sql_agent  # Global ifadesi fonksiyonun başında olmalı
+    
     if not sql_agent:
-        return jsonify({
-            'success': False,
-            'message': 'SQL Agent yapılandırılmamış. OPENAI_API_KEY ayarını kontrol edin.'
-        }), 500
+        # LangChain SQL agent yok, test edip yeniden kurmayı dene
+        sql_agent = setup_langchain_sql_agent()
+        
+        if not sql_agent:
+            return jsonify({
+                'success': False,
+                'message': 'SQL Agent yapılandırılamadı. Lütfen sistem yöneticisine başvurun.'
+            }), 500
     
     data = request.get_json()
     if not data or not data.get('query'):
         return jsonify({'success': False, 'message': 'Sorgu parametresi gerekli!'}), 400
     
     try:
-        # Sorguyu güvenlik kontrolünden geçir
         query = data.get('query')
-        lower_query = query.lower()
+        print(f"SQL Agent ile sorgu çalıştırılıyor: {query}")
         
-        # Güvenlik kontrolü - doğrudan tablo değişikliklerini engelle
-        # Bu kontroller öneri olarak korundu, agent kendisi de değişikliklerden kaçınabilir
-        if any(keyword in lower_query for keyword in ['drop', 'delete', 'update', 'insert', 'alter', 'truncate']):
+        # Önce güvenlik kontrolü (isteğe bağlı)
+        lower_query = query.lower()
+        if 'drop table' in lower_query or 'truncate table' in lower_query:
             return jsonify({
                 'success': False,
-                'message': 'Güvenlik nedeniyle, veri değiştirme sorguları kullanılamaz.'
+                'message': 'Güvenlik nedeniyle, tablo silme sorguları yasaktır.'
             }), 403
-        
-        print(f"SQL Agent ile sorgu çalıştırılıyor: {query}")
         
         # LangChain agent ile sorguyu çalıştır
         try:
-            # Agent'ı doğal dil sorgusu ile çalıştır
-            result = sql_agent.invoke({
-                "input": query
-            })
+            # İlk olarak doğal dil sorgusunu anlama
+            print("LangChain agent çağrılıyor...")
+            
+            # Sorguyu çalıştır ve zaman aşımı kontrolü ekle
+            import threading
+            import time
+            
+            result = None
+            error = None
+            
+            def run_agent():
+                nonlocal result, error
+                try:
+                    result = sql_agent.invoke({
+                        "input": query
+                    })
+                except Exception as e:
+                    error = str(e)
+            
+            # Agent'ı ayrı bir thread'de çalıştır
+            agent_thread = threading.Thread(target=run_agent)
+            agent_thread.start()
+            
+            # En fazla 60 saniye bekle
+            agent_thread.join(timeout=60)
+            
+            if agent_thread.is_alive():
+                # Zaman aşımı
+                return jsonify({
+                    'success': False,
+                    'message': 'SQL agent sorgu zaman aşımına uğradı (60 saniye)'
+                }), 504
+            
+            if error:
+                raise Exception(error)
+            
+            if not result:
+                return jsonify({
+                    'success': False,
+                    'message': 'SQL agent çalıştı ancak sonuç dönmedi'
+                }), 500
             
             # Agent'ın çıktısını al
             response = result.get("output", "Sonuç bulunamadı.")
             print(f"SQL agent sorgu sonucu: {response}")
             
-            return jsonify({
+            # Sonucu düzenle
+            formatted_result = {
                 'success': True,
                 'message': 'Sorgu başarıyla çalıştırıldı',
                 'result': response
-            }), 200
+            }
+            
+            # Sonuçta bir tablo varsa HTML olarak düzenleme
+            if '<table>' in response:
+                formatted_result['html_result'] = response
+            
+            return jsonify(formatted_result), 200
             
         except Exception as agent_error:
             print(f"SQL agent çalışma hatası: {str(agent_error)}")
-            return jsonify({
-                'success': False,
-                'message': 'SQL agent sorguyu çalıştıramadı',
-                'error': str(agent_error)
-            }), 500
+            
+            # Agent başarısız oldu, alternatif olarak doğrudan çalıştırmayı dene
+            try:
+                # Bu sadece SELECT sorguları için güvenli bir alternatif
+                if query.strip().lower().startswith('select'):
+                    print("SQL agent başarısız oldu, doğrudan sorgu çalıştırılıyor...")
+                    result = db_manager.execute_query(query)
+                    
+                    # Sonuçları formatlama
+                    formatted_results = []
+                    if result and len(result) > 0:
+                        for row in result:
+                            formatted_results.append([str(item) if item is not None else "NULL" for item in row])
+                    
+                    return jsonify({
+                        'success': True,
+                        'message': 'LangChain Agent başarısız oldu, ancak sorgu doğrudan çalıştırıldı',
+                        'result': formatted_results,
+                        'error': str(agent_error)
+                    }), 200
+                else:
+                    raise Exception("Doğrudan yalnızca SELECT sorguları çalıştırılabilir")
+            except Exception as direct_error:
+                return jsonify({
+                    'success': False,
+                    'message': 'SQL agent sorguyu çalıştıramadı ve alternatif yöntem de başarısız oldu',
+                    'agent_error': str(agent_error),
+                    'direct_error': str(direct_error)
+                }), 500
         
     except Exception as e:
         print(f"Genel SQL agent hatası: {str(e)}")
