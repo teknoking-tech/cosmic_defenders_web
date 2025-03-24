@@ -119,18 +119,6 @@ export FLASK_DEBUG=1
 python app.py
 ```
 
-### Testler
-
-Testleri çalıştırmak için:
-
-```bash
-pytest
-```
-
-## Lisans
-
-Bu proje MIT lisansı altında lisanslanmıştır. Detaylar için `LICENSE` dosyasına bakınız.
-
 ## İletişim
 
 Sorularınız için furkanyrgn19@gmail.com adresine e-posta gönderebilirsiniz.
