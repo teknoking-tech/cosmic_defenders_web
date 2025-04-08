@@ -11,8 +11,9 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Uygulama dosyasını kopyalayın
-COPY app.py .
-
+COPY app.py . 
+COPY rag_module.py .
+COPY requirements.txt .
 # FastAPI'nin 8000 portunu açın
 EXPOSE 8000
 

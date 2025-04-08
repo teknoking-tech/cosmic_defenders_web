@@ -20,6 +20,12 @@ const registerForm = document.getElementById('register-form');
 const loginMessage = document.getElementById('login-message');
 const registerMessage = document.getElementById('register-message');
 
+const ragAssistantLink = document.getElementById('rag-assistant-link');
+const ragAssistantSection = document.getElementById('rag-assistant-section');
+const askRagBtn = document.getElementById('ask-rag-btn');
+const refreshRagIndexBtn = document.getElementById('refresh-rag-index-btn');
+const checkRagStatusBtn = document.getElementById('check-rag-status-btn');
+
 // Status gösterici
 let statusIndicator = document.createElement('div');
 statusIndicator.className = 'status-indicator';
@@ -49,7 +55,10 @@ function showSection(section) {
         playerStatsLink.classList.add('active');
     } else if (section === adminPanelSection) {
         adminPanelLink.classList.add('active');
+    } else if (section === ragAssistantSection) {
+        ragAssistantLink.classList.add('active');
     }
+    
 }
 
 function showMessage(element, message, isError = false) {
@@ -91,6 +100,18 @@ function updateUI() {
         } else {
             adminPanelLink.classList.add('hidden');
         }
+        if (ragAssistantLink) {
+            ragAssistantLink.classList.remove('hidden');
+        }
+        
+        // Admin ise RAG yönetim seçeneklerini göster
+        if (userRole === 'admin') {
+            if (refreshRagIndexBtn) refreshRagIndexBtn.style.display = 'block';
+            if (checkRagStatusBtn) checkRagStatusBtn.style.display = 'block';
+        } else {
+            if (refreshRagIndexBtn) refreshRagIndexBtn.style.display = 'none';
+            if (checkRagStatusBtn) checkRagStatusBtn.style.display = 'none';
+        }
     } else {
         // Giriş yapılmamış
         loginLink.classList.remove('hidden');
@@ -98,7 +119,12 @@ function updateUI() {
         logoutLink.classList.add('hidden');
         playerStatsLink.classList.add('hidden');
         adminPanelLink.classList.add('hidden');
+        if (ragAssistantLink) {
+            ragAssistantLink.classList.add('hidden');
+        }
     }
+
+    
 }
 
 async function fetchWithToken(url, options = {}) {
@@ -343,6 +369,187 @@ async function runSqlQuery() {
         `;
     }
 }
+// 4. YENİ FONKSİYONLAR EKLEYİN: RAG işlevleri için
+// ===========================================
+
+// RAG sorusu sorma fonksiyonu
+async function askRAGQuestion() {
+    const questionInput = document.getElementById('rag-question-input');
+    const question = questionInput.value.trim();
+    
+    if (!question) {
+        showNotification('Lütfen bir soru girin.', 'error');
+        return;
+    }
+    
+    const answerContainer = document.querySelector('.rag-answer-container');
+    const answerElement = document.getElementById('rag-answer');
+    const sourcesElement = document.getElementById('rag-sources');
+    
+    // Yükleniyor durumunu göster
+    answerContainer.classList.add('active');
+    answerElement.innerHTML = '<div class="rag-loading"></div>';
+    sourcesElement.innerHTML = '';
+    
+    try {
+        const response = await fetchWithToken(`${API_URL}/api/rag/query`, {
+            method: 'POST',
+            body: JSON.stringify({ question })
+        });
+        
+        if (!response) {
+            throw new Error('Sunucu yanıt vermedi.');
+        }
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            // Yanıtı göster
+            answerElement.innerHTML = formatMarkdown(data.answer);
+            
+            // Kaynakları göster
+            if (data.sources && data.sources.length > 0) {
+                sourcesElement.innerHTML = '<p><strong>Kaynaklar:</strong></p><ul>' + 
+                    data.sources.map(source => `<li>${source.source}</li>`).join('') + 
+                    '</ul>';
+            } else {
+                sourcesElement.innerHTML = '';
+            }
+        } else {
+            throw new Error(data.message || 'Bir hata oluştu.');
+        }
+    } catch (error) {
+        console.error('RAG sorgu hatası:', error);
+        answerElement.innerHTML = `<div class="rag-error">${error.message || 'Bir hata oluştu. Lütfen tekrar deneyin.'}</div>`;
+        sourcesElement.innerHTML = '';
+    }
+}
+
+// RAG indeksini yenileme fonksiyonu (sadece admin)
+async function refreshRAGIndex() {
+    const statusElement = document.getElementById('rag-admin-status');
+    
+    if (!statusElement) {
+        showNotification('RAG durum elementi bulunamadı.', 'error');
+        return;
+    }
+    
+    statusElement.classList.add('active');
+    statusElement.innerHTML = '<div class="rag-loading"></div><p>RAG indeksi yenileniyor, bu işlem birkaç dakika sürebilir...</p>';
+    
+    try {
+        const response = await fetchWithToken(`${API_URL}/api/rag/refresh`, {
+            method: 'POST'
+        });
+        
+        if (!response) {
+            throw new Error('Sunucu yanıt vermedi.');
+        }
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            statusElement.innerHTML = `<p class="success">✅ ${data.message}</p>`;
+            showNotification('RAG indeksi başarıyla yenilendi.', 'success');
+        } else {
+            throw new Error(data.message || 'İndeks yenilenirken bir hata oluştu.');
+        }
+    } catch (error) {
+        console.error('RAG indeksi yenileme hatası:', error);
+        statusElement.innerHTML = `<div class="rag-error">${error.message || 'Bir hata oluştu. Lütfen tekrar deneyin.'}</div>`;
+        showNotification('RAG indeksi yenilenemedi.', 'error');
+    }
+    
+    // 5 saniye sonra durum mesajını gizle
+    setTimeout(() => {
+        statusElement.classList.remove('active');
+    }, 5000);
+}
+
+// RAG sistem durumunu kontrol etme fonksiyonu (sadece admin)
+async function checkRAGStatus() {
+    const statusElement = document.getElementById('rag-admin-status');
+    
+    if (!statusElement) {
+        showNotification('RAG durum elementi bulunamadı.', 'error');
+        return;
+    }
+    
+    statusElement.classList.add('active');
+    statusElement.innerHTML = '<div class="rag-loading"></div>';
+    
+    try {
+        const response = await fetchWithToken(`${API_URL}/api/rag/status`, {
+            method: 'GET'
+        });
+        
+        if (!response) {
+            throw new Error('Sunucu yanıt vermedi.');
+        }
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            const status = data.status;
+            statusElement.innerHTML = `
+                <h4>RAG Sistemi Durumu:</h4>
+                <ul>
+                    <li>Sistem Mevcut: ${status.available ? '✅ Evet' : '❌ Hayır'}</li>
+                    <li>İndeksleme Yapılmış: ${status.indexed ? '✅ Evet' : '❌ Hayır'}</li>
+                    <li>İndeks Dizini: ${status.persist_directory || 'Tanımlanmamış'}</li>
+                </ul>
+            `;
+        } else {
+            throw new Error(data.message || 'Durum kontrolü sırasında bir hata oluştu.');
+        }
+    } catch (error) {
+        console.error('RAG durum kontrolü hatası:', error);
+        statusElement.innerHTML = `<div class="rag-error">${error.message || 'Bir hata oluştu. Lütfen tekrar deneyin.'}</div>`;
+    }
+}
+
+// Markdown formatını HTML'e çeviren fonksiyon
+function formatMarkdown(text) {
+    if (!text) return '';
+    
+    // Başlıkları dönüştür (# Başlık)
+    text = text.replace(/^### (.*$)/gim, '<h3>$1</h3>');
+    text = text.replace(/^## (.*$)/gim, '<h2>$1</h2>');
+    text = text.replace(/^# (.*$)/gim, '<h1>$1</h1>');
+    
+    // Kalın metinleri dönüştür (**metin**)
+    text = text.replace(/\*\*(.*?)\*\*/gim, '<strong>$1</strong>');
+    
+    // İtalik metinleri dönüştür (*metin*)
+    text = text.replace(/\*(.*?)\*/gim, '<em>$1</em>');
+    
+    // Liste ögelerini dönüştür (- öğe)
+    text = text.replace(/^\s*- (.*$)/gim, '<li>$1</li>');
+    
+    // Liste ögelerini <ul> içine al
+    let isInList = false;
+    const lines = text.split('\n');
+    for (let i = 0; i < lines.length; i++) {
+        if (lines[i].match(/<li>/)) {
+            if (!isInList) {
+                lines[i] = '<ul>' + lines[i];
+                isInList = true;
+            }
+        } else if (isInList) {
+            lines[i-1] = lines[i-1] + '</ul>';
+            isInList = false;
+        }
+    }
+    if (isInList) {
+        lines[lines.length-1] += '</ul>';
+    }
+    text = lines.join('\n');
+    
+    // Satır sonlarını <br> etiketine dönüştür
+    text = text.replace(/\n/g, '<br>');
+    
+    return text;
+}
 
 // Sorgu sonuçlarını formatlama yardımcı fonksiyonu
 function formatQueryResult(result) {
@@ -471,7 +678,53 @@ function formatQueryResult(result) {
 
 // Mevcut DOMContentLoaded event listener'ınıza ekleyin
 document.addEventListener('DOMContentLoaded', () => {
-    // ... mevcut kodlar ...
+    function setupRAGEventListeners() {
+        // RAG Asistan link
+        if (ragAssistantLink) {
+            ragAssistantLink.addEventListener('click', function(e) {
+                e.preventDefault();
+                showSection(ragAssistantSection);
+            });
+        }
+        
+        // Soru sorma butonu
+        if (askRagBtn) {
+            askRagBtn.addEventListener('click', askRAGQuestion);
+        }
+        
+        // Örnek soruları tıklanabilir yap
+        const questionExamples = document.querySelectorAll('.question-examples li');
+        questionExamples.forEach(example => {
+            example.addEventListener('click', function() {
+                const questionInput = document.getElementById('rag-question-input');
+                if (questionInput) {
+                    questionInput.value = this.textContent.trim();
+                    questionInput.focus();
+                }
+            });
+        });
+        
+        // Admin: RAG indeks yenileme butonu
+        if (refreshRagIndexBtn) {
+            refreshRagIndexBtn.addEventListener('click', refreshRAGIndex);
+        }
+        
+        // Admin: RAG durum kontrolü butonu
+        if (checkRagStatusBtn) {
+            checkRagStatusBtn.addEventListener('click', checkRAGStatus);
+        }
+        
+        // Enter tuşuyla RAG soru gönderme
+        const ragQuestionInput = document.getElementById('rag-question-input');
+        if (ragQuestionInput) {
+            ragQuestionInput.addEventListener('keydown', function(e) {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    askRAGQuestion();
+                }
+            });
+        }
+    }
     
     // SQL Sorgu butonunu dinle
     const runQueryBtn = document.getElementById('run-sql-query-btn');
@@ -501,6 +754,8 @@ document.addEventListener('DOMContentLoaded', () => {
     
     // Kullanıcı bilgilerini getir
     fetchUserInfo();
+    setupRAGEventListeners();
+
     
     // Navigasyon
     homeLink.addEventListener('click', (e) => {
@@ -673,6 +928,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const starsContainer = document.createElement('div');
     starsContainer.className = 'stars';
     document.body.appendChild(starsContainer);
+    
     
     // Rastgele 100 yıldız oluştur
     for (let i = 0; i < 100; i++) {

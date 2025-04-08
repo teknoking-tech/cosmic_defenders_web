@@ -10,6 +10,9 @@ from datetime import datetime, timedelta, timezone
 from abc import ABC, abstractmethod
 from contextlib import contextmanager
 
+
+
+
 # Güncel LangChain import'ları
 from langchain_community.utilities.sql_database import SQLDatabase
 from langchain_openai import ChatOpenAI
@@ -17,6 +20,7 @@ from langchain.agents import create_sql_agent
 from langchain.agents.agent_types import AgentType
 from langchain.agents.agent_toolkits import SQLDatabaseToolkit
 
+from rag_module import RAGSystem
 
 # .env dosyasını yükle
 load_dotenv()
@@ -35,7 +39,22 @@ oracle_sid = os.getenv('ORACLE_SID', 'XE')
 
 oracle_connection_string = f"{oracle_user}/{oracle_password}@{oracle_host}:{oracle_port}/{oracle_sid}"
 
-
+# RAG sistemi örneğini oluştur (dosya başında, global seviyede)
+try:
+    rag_system = RAGSystem()
+    # İlk çalıştırmada indeks oluştur
+    if not os.path.exists(rag_system.persist_directory):
+        print("RAG indeksi oluşturuluyor...")
+        success = rag_system.index_documents()
+        if success:
+            print("RAG indeksi başarıyla oluşturuldu.")
+        else:
+            print("RAG indeksi oluşturulamadı!")
+    else:
+        print(f"Var olan RAG indeksi kullanılıyor: {rag_system.persist_directory}")
+except Exception as e:
+    print(f"RAG sistemi başlatma hatası: {str(e)}")
+    rag_system = None
 
 # Güncel kurulum kodu
 def setup_langchain_sql_agent():
@@ -802,6 +821,112 @@ def user_info():
         return jsonify({
             'success': False,
             'message': 'Veri alınamadı',
+            'error': str(e)
+        }), 500
+    
+# RAG sistemini kullanmak için yeni bir endpoint ekleyin
+@app.route('/api/rag/query', methods=['POST'])
+@token_required
+def rag_query():
+    global rag_system
+    
+    try:
+        data = request.get_json()
+        if not data or not data.get('question'):
+            return jsonify({'success': False, 'message': 'Soru parametresi gerekli!'}), 400
+        
+        question = data.get('question')
+        
+        # RAG sistemi hazır değilse
+        if not rag_system or not rag_system.vectordb:
+            try:
+                print("RAG sistemi hazır değil, yeniden başlatılıyor...")
+                rag_system = RAGSystem()
+                success = rag_system.index_documents()
+                if not success:
+                    return jsonify({
+                        'success': False, 
+                        'message': 'RAG sistemi hazırlanamadı!'
+                    }), 500
+            except Exception as e:
+                return jsonify({
+                    'success': False,
+                    'message': 'RAG sistemi başlatılamadı',
+                    'error': str(e)
+                }), 500
+        
+        # Soruyu yanıtla
+        response = rag_system.ask(question)
+        
+        return jsonify({
+            'success': True,
+            'answer': response['answer'],
+            'sources': response['sources']
+        }), 200
+        
+    except Exception as e:
+        print(f"RAG sorgu hatası: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({
+            'success': False,
+            'message': 'Sorgu işlenirken hata oluştu',
+            'error': str(e)
+        }), 500
+
+# Admin kullanıcıları için RAG indeksini yenileme endpoint'i
+@app.route('/api/rag/refresh', methods=['POST'])
+@role_required(['admin'])
+def refresh_rag_index():
+    global rag_system
+    
+    try:
+        if not rag_system:
+            rag_system = RAGSystem()
+        
+        success = rag_system.refresh_index()
+        
+        if success:
+            return jsonify({
+                'success': True,
+                'message': 'RAG indeksi başarıyla yenilendi.'
+            }), 200
+        else:
+            return jsonify({
+                'success': False,
+                'message': 'RAG indeksi yenilenemedi!'
+            }), 500
+            
+    except Exception as e:
+        print(f"RAG indeksi yenileme hatası: {str(e)}")
+        return jsonify({
+            'success': False,
+            'message': 'İndeks yenilenirken hata oluştu',
+            'error': str(e)
+        }), 500
+
+# RAG sistemi durumunu kontrol endpoint'i
+@app.route('/api/rag/status', methods=['GET'])
+@role_required(['admin'])
+def rag_status():
+    global rag_system
+    
+    try:
+        status = {
+            'available': rag_system is not None,
+            'indexed': rag_system is not None and rag_system.vectordb is not None,
+            'persist_directory': rag_system.persist_directory if rag_system else None
+        }
+        
+        return jsonify({
+            'success': True,
+            'status': status
+        }), 200
+        
+    except Exception as e:
+        return jsonify({
+            'success': False,
+            'message': 'RAG durumu alınamadı',
             'error': str(e)
         }), 500
 

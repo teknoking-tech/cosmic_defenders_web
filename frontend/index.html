@@ -23,6 +23,8 @@
                     <li><a href="#" id="player-stats-link" class="hidden">Oyuncu İstatistikleri</a></li>
                     <li><a href="#" id="admin-panel-link" class="hidden">Admin Paneli</a></li>
                     <li><a href="#" id="logout-link" class="hidden">Çıkış Yap</a></li>
+                    <li><a href="#" id="rag-assistant-link" class="hidden">Oyun Asistanı</a></li>
+
                 </ul>
             </nav>
         </header>
@@ -97,6 +99,35 @@
                     <div class="stats-loader">Yükleniyor...</div>
                 </div>
             </section>
+            <section id="rag-assistant-section" class="section hidden">
+                <h2>Cosmic Defenders Asistanı</h2>
+                <div class="rag-container">
+                    <div class="rag-description">
+                        <p>Oyun dünyası hakkında sorularınızı sorun. Asistanımız oyun mekanikleri, oyuncu istatistikleri ve oyun içi bilgiler konusunda size yardımcı olabilir.</p>
+                        
+                        <div class="question-examples">
+                            <p>Örnek sorular:</p>
+                            <ul>
+                                <li>"En yüksek seviyeli oyuncular kimler?"</li>
+                                <li>"Seviye atlama sistemi nasıl çalışır?"</li>
+                                <li>"En çok deneyim puanına sahip oyuncu kim?"</li>
+                                <li>"Oyun skorları nasıl hesaplanıyor?"</li>
+                                <li>"Seviye 3'te hangi özellikler açılıyor?"</li>
+                            </ul>
+                        </div>
+                    </div>
+                    
+                    <div class="rag-interaction">
+                        <textarea id="rag-question-input" placeholder="Oyun hakkında bir soru sorun..."></textarea>
+                        <button id="ask-rag-btn" class="cosmic-button">Soru Sor</button>
+                    </div>
+                    
+                    <div class="rag-answer-container">
+                        <div id="rag-answer" class="rag-answer"></div>
+                        <div id="rag-sources" class="rag-sources"></div>
+                    </div>
+                </div>
+            </section>
 
             <section id="admin-panel-section" class="section hidden">
                 <h2>Admin Paneli</h2>
@@ -119,6 +150,17 @@
                     <textarea id="sql-query-input" placeholder="Oyuncu verileri hakkında sorunuzu buraya yazın..."></textarea>
                     <button id="run-sql-query-btn" class="glow-button">Sorguyu Çalıştır</button>
                     <div id="sql-query-result" class="query-result"></div>
+                </div>
+                <div class="rag-admin-section">
+                    <h3>RAG Sistemi Yönetimi</h3>
+                    <p>Bilgi çıkarım sistemi yönetim araçları:</p>
+                    
+                    <div class="rag-admin-controls">
+                        <button id="refresh-rag-index-btn" class="admin-button">RAG İndeksini Yenile</button>
+                        <button id="check-rag-status-btn" class="admin-button">Sistem Durumunu Kontrol Et</button>
+                    </div>
+                    
+                    <div id="rag-admin-status" class="rag-admin-status"></div>
                 </div>
             </section>
 

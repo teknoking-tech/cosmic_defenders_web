@@ -657,3 +657,208 @@
       border-radius: 50%;
       z-index: -1;
     }
+
+    /* Aşağıdaki RAG ile ilgili CSS stillerini styles.css dosyanıza ekleyin */
+
+/* RAG Asistanı Bölümü */
+.rag-container {
+  background: rgba(16, 24, 48, 0.7);
+  border-radius: 12px;
+  padding: 20px;
+  margin-top: 20px;
+  box-shadow: 0 0 20px rgba(82, 134, 255, 0.2);
+  border: 1px solid rgba(82, 134, 255, 0.3);
+}
+
+.rag-description {
+  margin-bottom: 20px;
+}
+
+.question-examples {
+  background: rgba(30, 40, 80, 0.6);
+  padding: 15px;
+  border-radius: 8px;
+  margin-top: 15px;
+}
+
+.question-examples ul {
+  margin-top: 10px;
+  padding-left: 20px;
+}
+
+.question-examples li {
+  margin-bottom: 8px;
+  color: #add8e6;
+  cursor: pointer;
+  transition: color 0.2s;
+}
+
+.question-examples li:hover {
+  color: #5286ff;
+}
+
+.rag-interaction {
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+}
+
+#rag-question-input {
+  background: rgba(30, 40, 80, 0.5);
+  border: 1px solid rgba(82, 134, 255, 0.4);
+  color: #ffffff;
+  padding: 15px;
+  border-radius: 8px;
+  min-height: 100px;
+  width: 100%;
+  font-family: 'Exo 2', sans-serif;
+  resize: vertical;
+}
+
+.cosmic-button {
+  background: linear-gradient(135deg, #4a6bff 0%, #2a3dcc 100%);
+  color: white;
+  border: none;
+  padding: 12px 25px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-weight: 600;
+  font-family: 'Exo 2', sans-serif;
+  transition: all 0.3s;
+  align-self: flex-end;
+  display: inline-block;
+}
+
+.cosmic-button:hover {
+  background: linear-gradient(135deg, #5d7eff 0%, #3b4edf 100%);
+  box-shadow: 0 0 15px rgba(82, 134, 255, 0.5);
+  transform: translateY(-2px);
+}
+
+.cosmic-button:active {
+  transform: translateY(1px);
+}
+
+.rag-answer-container {
+  margin-top: 25px;
+  opacity: 0;
+  height: 0;
+  overflow: hidden;
+  transition: opacity 0.5s, height 0.5s;
+}
+
+.rag-answer-container.active {
+  opacity: 1;
+  height: auto;
+  overflow: visible;
+}
+
+.rag-answer {
+  background: rgba(30, 40, 80, 0.7);
+  padding: 20px;
+  border-radius: 8px;
+  border-left: 4px solid #5286ff;
+  margin-bottom: 15px;
+  line-height: 1.6;
+}
+
+.rag-sources {
+  font-size: 0.85em;
+  color: #adb5bd;
+  padding: 10px;
+  background: rgba(20, 30, 60, 0.5);
+  border-radius: 6px;
+}
+
+.rag-sources a {
+  color: #5286ff;
+  text-decoration: none;
+}
+
+.rag-sources a:hover {
+  text-decoration: underline;
+}
+
+/* RAG Admin Bölümü */
+.rag-admin-section {
+  margin-top: 30px;
+  padding: 20px;
+  background: rgba(20, 30, 60, 0.6);
+  border-radius: 10px;
+  border: 1px solid rgba(82, 134, 255, 0.2);
+}
+
+.rag-admin-controls {
+  display: flex;
+  gap: 15px;
+  margin-top: 15px;
+  flex-wrap: wrap;
+}
+
+.admin-button {
+  background: linear-gradient(135deg, #37474f 0%, #263238 100%);
+  color: white;
+  border: none;
+  padding: 10px 20px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-weight: 500;
+  transition: all 0.3s;
+}
+
+.admin-button:hover {
+  background: linear-gradient(135deg, #455a64 0%, #37474f 100%);
+  box-shadow: 0 0 10px rgba(70, 70, 70, 0.4);
+}
+
+.admin-button:active {
+  transform: translateY(1px);
+}
+
+.rag-admin-status {
+  margin-top: 15px;
+  padding: 15px;
+  background: rgba(30, 40, 60, 0.5);
+  border-radius: 6px;
+  min-height: 50px;
+  display: none;
+}
+
+.rag-admin-status.active {
+  display: block;
+}
+
+/* Yükleniyor animasyonu */
+.rag-loading {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  padding: 20px;
+}
+
+.rag-loading::after {
+  content: "";
+  width: 30px;
+  height: 30px;
+  border: 3px solid #6e92ff;
+  border-top: 3px solid transparent;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+/* Hata mesajları için stil */
+.rag-error {
+  color: #ff6b6b;
+  background: rgba(255, 107, 107, 0.1);
+  border-left: 4px solid #ff6b6b;
+  padding: 15px;
+  border-radius: 0 8px 8px 0;
+  margin-top: 15px;
+}
+
+
